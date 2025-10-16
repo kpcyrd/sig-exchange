@@ -7,10 +7,12 @@ edition = "2024"
 alpm-srcinfo = { version = "0.4.0", default-features = false }
 alpm-types = "0.8.0"
 anyhow = "1.0.100"
+async-compression = { version = "0.4.32", features = ["tokio", "xz"] }
 clap = { version = "4.5.49", features = ["derive"] }
 deb822-fast = "0.2.0"
 env_logger = "0.11.8"
 log = "0.4.28"
-lzma-rust2 = "0.14.3"
-sequoia-openpgp = "2.0.0"
+sequoia-openpgp = { version = "2.0.0", features = ["allow-experimental-crypto", "allow-variable-time-crypto", "crypto-rust"], default-features = false }
 tokio = { version = "1.48.0", features = ["rt-multi-thread", "macros", "fs"] }
+tokio-stream = "0.1.17"
+tokio-tar = "0.3.1"

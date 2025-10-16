@@ -1,7 +1,10 @@
 use crate::errors::*;
 use crate::sig::RemoteSig;
-use std::collections::BTreeMap;
+use async_compression::tokio::bufread::XzDecoder;
 use std::io::Read;
+use std::{collections::BTreeMap, path::Path};
+use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
+use tokio_stream::StreamExt;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Pkg {
@@ -10,16 +13,21 @@ pub struct Pkg {
     pub sigs: Vec<RemoteSig>,
 }
 
-pub fn parse(buf: &[u8]) -> Result<Vec<Pkg>> {
-    let reader = lzma_rust2::XzReader::new(buf, false);
-    parse_decompressed_reader(reader)
+pub async fn parse_source_index<R: AsyncRead + Unpin>(reader: R) -> Result<Vec<Pkg>> {
+    let reader = BufReader::new(reader);
+    let mut reader = XzDecoder::new(reader);
+
+    let mut buf = Vec::new();
+    reader.read_to_end(&mut buf).await?;
+
+    parse_decompressed_reader_source_index(&buf[..])
 }
 
 fn is_signature(filename: &str) -> Option<&str> {
     filename.strip_suffix(".asc")
 }
 
-pub fn parse_decompressed_reader<R: Read>(reader: R) -> Result<Vec<Pkg>> {
+pub fn parse_decompressed_reader_source_index<R: Read>(reader: R) -> Result<Vec<Pkg>> {
     let deb822 = deb822_fast::Deb822::from_reader(reader)
         .map_err(|err| anyhow!("Failed to parse deb822: {err:#}"))?;
 
@@ -93,6 +101,30 @@ pub fn parse_decompressed_reader<R: Read>(reader: R) -> Result<Vec<Pkg>> {
     }
 
     Ok(pkgs)
+}
+
+pub async fn parse_source_tar<R: AsyncRead + Unpin>(reader: R) -> Result<Option<String>> {
+    let reader = BufReader::new(reader);
+    let reader = XzDecoder::new(reader);
+
+    let mut tar = tokio_tar::Archive::new(reader);
+    let mut entries = tar.entries()?;
+
+    while let Some(entry) = entries.next().await {
+        let mut entry = entry?;
+        let path = entry.path()?;
+        if path != Path::new("debian/upstream/signing-key.asc") {
+            debug!("Found file in debian tar: {path:?}");
+            continue;
+        }
+        info!("Found file in debian tar: {path:?}");
+
+        let mut buf = String::new();
+        entry.read_to_string(&mut buf).await?;
+        return Ok(Some(buf));
+    }
+
+    Ok(None)
 }
 
 #[cfg(test)]

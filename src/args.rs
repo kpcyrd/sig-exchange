@@ -19,4 +19,5 @@ pub enum SubCommand {
 pub enum Plumbing {
     Srcinfo { path: PathBuf },
     DebSrc { path: PathBuf },
+    DebianTar { path: PathBuf },
 }
