@@ -1,5 +1,6 @@
 mod archlinux;
 mod args;
+mod db;
 mod debian;
 mod errors;
 mod plumbing;
@@ -20,6 +21,8 @@ async fn main() -> Result<()> {
         _ => "trace",
     };
     env_logger::init_from_env(Env::default().default_filter_or(log_level));
+
+    dotenvy::dotenv().ok();
 
     trace!("Args: {args:#?}");
     match args.subcommand {

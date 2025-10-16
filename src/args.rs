@@ -20,5 +20,7 @@ pub enum Plumbing {
     ArchlinuxTar { path: PathBuf },
     DebSrc { path: PathBuf },
     DebianTar { path: PathBuf },
+    Migrate,
+    PingDb,
     Srcinfo { path: PathBuf },
 }

@@ -1,4 +1,4 @@
-use crate::{archlinux, debian, errors::*};
+use crate::{archlinux, db, debian, errors::*};
 use crate::{args::Plumbing, srcinfo};
 use tokio::fs;
 
@@ -26,6 +26,15 @@ pub async fn run(cmd: Plumbing) -> Result<()> {
                 .with_context(|| format!("Failed to open file: {path:?}"))?;
             let key = debian::parse_source_tar(file).await?;
             println!("key={key:#?}");
+        }
+        Plumbing::Migrate => {
+            let _db = db::Client::create().await?;
+            info!("All migrations have been applied");
+        }
+        Plumbing::PingDb => {
+            let db = db::Client::create_no_migrations().await?;
+            let version = db.ping().await?;
+            println!("Database connected: {version:?}");
         }
         Plumbing::Srcinfo { path } => {
             let buf = fs::read_to_string(&path)

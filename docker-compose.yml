@@ -1,0 +1,25 @@
+---
+services:
+#  web:
+#    build: .
+#    init: true
+#    ports:
+#    - 127.0.0.1:8000:8000
+#    command: ["daemon"]
+#    environment:
+#    - DATABASE_URL=postgres://postgres:postgres@db/sig-exchange
+#
+#  worker:
+#    build: .
+#    init: true
+#    command: ["worker"]
+#    environment:
+#    - DATABASE_URL=postgres://postgres:postgres@db/sig-exchange
+
+  db:
+    image: postgres:18-alpine
+    ports:
+    - 127.0.0.1:5432:5432
+    environment:
+    - POSTGRES_DB=sig-exchange
+    - POSTGRES_PASSWORD=postgres
