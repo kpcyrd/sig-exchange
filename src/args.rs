@@ -1,5 +1,5 @@
 use clap::{ArgAction, Parser, Subcommand};
-use std::path::PathBuf;
+use std::{net::SocketAddr, path::PathBuf};
 
 #[derive(Debug, Parser)]
 pub struct Args {
@@ -9,13 +9,22 @@ pub struct Args {
     pub subcommand: SubCommand,
 }
 
-#[derive(Debug, Clone, Subcommand)]
+#[derive(Debug, Subcommand)]
 pub enum SubCommand {
+    #[command(alias = "daemon")]
+    Web(Web),
     #[command(subcommand)]
     Plumbing(Plumbing),
 }
 
-#[derive(Debug, Clone, Parser)]
+/// Run the web server daemon
+#[derive(Debug, Parser)]
+pub struct Web {
+    #[arg(short = 'B', long, env)]
+    pub bind_addr: SocketAddr,
+}
+
+#[derive(Debug, Parser)]
 pub enum Plumbing {
     ArchlinuxTar { path: PathBuf },
     DebSrc { path: PathBuf },

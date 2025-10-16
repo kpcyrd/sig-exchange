@@ -2,7 +2,7 @@ use crate::errors::*;
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
 use std::env;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Client {
     pool: Pool<Postgres>,
 }
