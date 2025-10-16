@@ -1,3 +1,4 @@
+mod archlinux;
 mod args;
 mod debian;
 mod errors;

@@ -75,11 +75,11 @@ pub fn parse_decompressed_reader_source_index<R: Read>(reader: R) -> Result<Vec<
         };
 
         // check if there's any signatures
-        if map.keys().find(|f| is_signature(f).is_some()).is_some() {
+        if map.keys().any(|f| is_signature(f).is_some()) {
             info!("Found package with signatures: name={name:?} version={version:?}");
         }
 
-        for (sig_filename, _) in &map {
+        for sig_filename in map.keys() {
             let Some(filename) = is_signature(sig_filename) else {
                 continue;
             };
@@ -163,7 +163,7 @@ Priority: source
 Section: net
 
 "#;
-        let list = parse_decompressed_reader(data.as_bytes()).unwrap();
+        let list = parse_decompressed_reader_source_index(data.as_bytes()).unwrap();
         assert_eq!(
             list,
             vec![Pkg {

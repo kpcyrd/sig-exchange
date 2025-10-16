@@ -17,7 +17,8 @@ pub enum SubCommand {
 
 #[derive(Debug, Clone, Parser)]
 pub enum Plumbing {
-    Srcinfo { path: PathBuf },
+    ArchlinuxTar { path: PathBuf },
     DebSrc { path: PathBuf },
     DebianTar { path: PathBuf },
+    Srcinfo { path: PathBuf },
 }
