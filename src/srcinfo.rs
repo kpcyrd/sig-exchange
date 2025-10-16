@@ -1,12 +1,13 @@
 use crate::{errors::*, sig::RemoteSig};
 use alpm_srcinfo::source_info::v1::SourceInfoV1;
-use alpm_types::{Digest, SkippableChecksum, Source as AlpmSource};
+use alpm_types::{Digest, OpenPGPIdentifier, SkippableChecksum, Source as AlpmSource};
 use std::collections::BTreeMap;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Pkg {
     pub name: String,
     pub version: String,
+    pub signing_keys: Vec<OpenPGPIdentifier>,
     pub sigs: Vec<RemoteSig>,
 }
 
@@ -77,6 +78,7 @@ pub fn parse(srcinfo: &str) -> Result<Pkg> {
     let mut pkg = Pkg {
         name: pkgbase.name.to_string(),
         version: pkgbase.version.to_string(),
+        signing_keys: pkgbase.pgp_fingerprints,
         sigs: Vec::new(),
     };
 
@@ -131,6 +133,7 @@ mod tests {
             Pkg {
                 name: "rebuilderd".to_string(),
                 version: "0.25.0-1".to_string(),
+                signing_keys: vec!["64B13F7117D6E07D661BBCE0FE763A64F5E54FD6".parse().unwrap()],
                 sigs: vec![RemoteSig {
                     location: "https://github.com/kpcyrd/rebuilderd/releases/download/v0.25.0/rebuilderd-0.25.0.tar.gz.asc".to_string(),
                     for_hash: [
