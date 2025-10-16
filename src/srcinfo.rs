@@ -1,19 +1,13 @@
-use crate::errors::*;
+use crate::{errors::*, sig::RemoteSig};
 use alpm_srcinfo::source_info::v1::SourceInfoV1;
 use alpm_types::{Digest, SkippableChecksum, Source as AlpmSource};
 use std::collections::BTreeMap;
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct Sig {
-    pub location: String,
-    pub for_hash: BTreeMap<&'static str, String>,
-}
-
-#[derive(Debug, PartialEq, Eq)]
 pub struct Pkg {
     pub name: String,
     pub version: String,
-    pub sigs: Vec<Sig>,
+    pub sigs: Vec<RemoteSig>,
 }
 
 fn filename(src: &AlpmSource) -> Result<String> {
@@ -113,7 +107,7 @@ pub fn parse(srcinfo: &str) -> Result<Pkg> {
         checksum(&mut hashes, "sha384", pkgbase.sha384_checksums.get(idx));
         checksum(&mut hashes, "sha512", pkgbase.sha512_checksums.get(idx));
 
-        pkg.sigs.push(Sig {
+        pkg.sigs.push(RemoteSig {
             location: location(src)
                 .with_context(|| anyhow!("Failed to get location for source #{idx}"))?
                 .to_string(),
@@ -137,7 +131,7 @@ mod tests {
             Pkg {
                 name: "rebuilderd".to_string(),
                 version: "0.25.0-1".to_string(),
-                sigs: vec![Sig {
+                sigs: vec![RemoteSig {
                     location: "https://github.com/kpcyrd/rebuilderd/releases/download/v0.25.0/rebuilderd-0.25.0.tar.gz.asc".to_string(),
                     for_hash: [
                         ("blake2b", "d8700167849f09eb2667e198f5c91f4a910566f3b1a7100a4f835181b9aff17892d9c976665e5dc60c6bec74ac9262d673c9add3cbe62470f90cc5fd4912d2dc".to_string()),

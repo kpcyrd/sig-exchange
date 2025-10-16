@@ -1,6 +1,8 @@
 mod args;
+mod debian;
 mod errors;
 mod plumbing;
+mod sig;
 mod srcinfo;
 
 use crate::args::Args;

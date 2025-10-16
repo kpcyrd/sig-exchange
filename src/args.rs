@@ -18,4 +18,5 @@ pub enum SubCommand {
 #[derive(Debug, Clone, Parser)]
 pub enum Plumbing {
     Srcinfo { path: PathBuf },
+    DebSrc { path: PathBuf },
 }
