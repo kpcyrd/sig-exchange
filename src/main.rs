@@ -3,6 +3,9 @@ mod args;
 mod db;
 mod debian;
 mod errors;
+mod import;
+mod issuer;
+mod pgp;
 mod plumbing;
 mod sig;
 mod srcinfo;
@@ -18,7 +21,8 @@ async fn main() -> Result<()> {
     let args = Args::parse();
     let log_level = match args.verbose {
         0 => "info",
-        1 => "debug",
+        1 => "sig_exchange=debug,info",
+        2 => "debug",
         _ => "trace",
     };
     env_logger::init_from_env(Env::default().default_filter_or(log_level));
@@ -28,6 +32,7 @@ async fn main() -> Result<()> {
     trace!("Args: {args:#?}");
     match args.subcommand {
         args::SubCommand::Web(web) => web::run(&web).await,
+        args::SubCommand::Import(import) => import::run(&import).await,
         args::SubCommand::Plumbing(plumbing) => plumbing::run(plumbing).await,
     }
 }

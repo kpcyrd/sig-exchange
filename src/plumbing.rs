@@ -1,4 +1,4 @@
-use crate::{archlinux, db, debian, errors::*};
+use crate::{archlinux, db, debian, errors::*, pgp};
 use crate::{args::Plumbing, srcinfo};
 use tokio::fs;
 
@@ -30,6 +30,12 @@ pub async fn run(cmd: Plumbing) -> Result<()> {
         Plumbing::Migrate => {
             let _db = db::Client::create().await?;
             info!("All migrations have been applied");
+        }
+        Plumbing::PgpSigs { path } => {
+            let buf = fs::read_to_string(&path)
+                .await
+                .with_context(|| format!("Failed to read file: {path:?}"))?;
+            pgp::parse(&buf)?;
         }
         Plumbing::PingDb => {
             let db = db::Client::create_no_migrations().await?;

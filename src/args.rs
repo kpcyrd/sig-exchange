@@ -14,6 +14,8 @@ pub enum SubCommand {
     #[command(alias = "daemon")]
     Web(Web),
     #[command(subcommand)]
+    Import(Import),
+    #[command(subcommand)]
     Plumbing(Plumbing),
 }
 
@@ -25,11 +27,17 @@ pub struct Web {
 }
 
 #[derive(Debug, Parser)]
+pub enum Import {
+    PgpSigs { path: PathBuf },
+}
+
+#[derive(Debug, Parser)]
 pub enum Plumbing {
     ArchlinuxTar { path: PathBuf },
     DebSrc { path: PathBuf },
     DebianTar { path: PathBuf },
     Migrate,
+    PgpSigs { path: PathBuf },
     PingDb,
     Srcinfo { path: PathBuf },
 }

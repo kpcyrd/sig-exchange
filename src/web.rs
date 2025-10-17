@@ -2,10 +2,12 @@ use crate::args;
 use crate::db;
 use crate::errors::*;
 use rust_embed::RustEmbed;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::convert::Infallible;
 use std::result;
 use std::sync::Arc;
-use warp::{Filter, http::StatusCode, reply::Response};
+use warp::{Filter, http::StatusCode, reject::MethodNotAllowed, reply::Response};
 
 #[derive(RustEmbed)]
 #[folder = "templates"]
@@ -55,6 +57,51 @@ async fn style() -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
     Ok(Box::new(response))
 }
 
+async fn get_sig(
+    hbs: Arc<Handlebars>,
+    db: db::Client,
+    chksum: String,
+) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
+    let html = hbs.render(
+        "sig.html.hbs",
+        &serde_json::json!({
+            "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
+            "id": chksum,
+        }),
+    )?;
+    Ok(Box::new(warp::reply::html(html)))
+}
+
+async fn get_issuer(
+    hbs: Arc<Handlebars>,
+    db: db::Client,
+    fingerprint: String,
+) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
+    let html = hbs.render(
+        "issuer.html.hbs",
+        &serde_json::json!({
+            "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
+            "id": fingerprint,
+        }),
+    )?;
+    Ok(Box::new(warp::reply::html(html)))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Search {
+    pub query: String,
+}
+
+async fn search(
+    _db: db::Client,
+    search: Search,
+) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
+    Ok(Box::new(warp::reply::json(&json!({
+        "status": "ok",
+        "req": search
+    }))))
+}
+
 async fn rejection(err: warp::Rejection) -> result::Result<impl warp::Reply, Infallible> {
     let code;
     let message;
@@ -62,6 +109,13 @@ async fn rejection(err: warp::Rejection) -> result::Result<impl warp::Reply, Inf
     if err.is_not_found() {
         code = StatusCode::NOT_FOUND;
         message = "404 - file not found\n";
+    } else if let Some(_err) = err.find::<ApiError>() {
+        error!("api error: {:?}", err);
+        code = StatusCode::INTERNAL_SERVER_ERROR;
+        message = "server error\n";
+    } else if let Some(_err) = err.find::<MethodNotAllowed>() {
+        code = StatusCode::BAD_REQUEST;
+        message = "400 - bad request\n";
     } else {
         error!("unhandled rejection: {:?}", err);
         code = StatusCode::INTERNAL_SERVER_ERROR;
@@ -92,8 +146,31 @@ pub async fn run(args: &args::Web) -> Result<()> {
         .and(warp::path::end())
         .and_then(style);
 
+    let search = warp::post()
+        .and(db.clone())
+        .and(warp::body::json())
+        .and(warp::path("search"))
+        .and(warp::path::end())
+        .and_then(search);
+
+    let get_sig = warp::get()
+        .and(hbs.clone())
+        .and(db.clone())
+        .and(warp::path("sig"))
+        .and(warp::path::param())
+        .and(warp::path::end())
+        .and_then(get_sig);
+
+    let get_issuer = warp::get()
+        .and(hbs.clone())
+        .and(db.clone())
+        .and(warp::path("issuer"))
+        .and(warp::path::param())
+        .and(warp::path::end())
+        .and_then(get_issuer);
+
     let routes = warp::any()
-        .and(index.or(style))
+        .and(index.or(style).or(search).or(get_sig).or(get_issuer))
         .recover(rejection)
         .with(log);
 

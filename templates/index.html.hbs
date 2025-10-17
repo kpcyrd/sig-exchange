@@ -1,15 +1,59 @@
-<!DOCTYPE html>
-<html lang="en">
+{{#*inline "title"}}
+sig.exchange
+{{/inline}}
+{{#*inline "page"}}
 
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>sig.exchange</title>
-    <link rel="stylesheet" href="/assets/style.css">
-</head>
+<h1>🌈🔏 sig.exchange</h1>
 
-<body>
-    <p>{{ db_version }}</p>
-</body>
+<p><i>Linking signatures to well-known hashes so you don't have to.</i></p>
 
-</html>
+<h3>Search by issuer</h3>
+
+<form action="/issuer/" method="get">
+    <input type="text" name="fingerprint" placeholder="2fd4e1c67a2d28fced849ee1bb76e7391b93eb12">
+    <input type="submit" value="Search">
+</form>
+
+<h3>Search by artifact</h3>
+
+<form action="/artifact/" method="get">
+    <input type="text" name="hash" placeholder="sha256:d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592">
+    <input type="submit" value="Search">
+</form>
+
+<h3>Search by pkg</h3>
+
+<form action="/pkg/" method="get">
+    <input type="text" name="name" placeholder="sniffglue">
+    <input type="submit" value="Search">
+</form>
+
+<!--
+<h3>What this project does</h3>
+<ul>
+    <li>Shows what signatures are present for given artifacts</li>
+    <li>Shows what signing keys are considered upstream for certain packages (according to Arch Linux and Debian)</li>
+    <li>Shows what signatures a key has issued (as observed by Arch Linux and Debian)</li>
+    <li>Helps you verify those signatures</li>
+</ul>
+
+<h3>What this project doesn't do</h3>
+<ul>
+    <li>Linking signing keys to human identities</li>
+    <li>Deciding what's the signing key of a given open source project</li>
+</ul>
+
+<h3>Why</h3>
+<p>
+Most opensource projects use cryptographic hashes to identify their source code
+and build inputs. Not all of them use cryptographic signatures to ensure
+authenticity and integrity.</p>
+<p>As long as consensus exists that there's valid
+signatures for a given artifact, the build inputs can be considered authentic
+even in projects that don't consume code signatures, as long as their
+inputs are pinned to the same cryptographic hashes.
+</p>
+-->
+
+{{/inline}}
+{{> base.html.hbs }}
