@@ -91,7 +91,9 @@ async fn get_issuer(
     db: db::Client,
     fingerprint: String,
 ) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
-    let issuer = db.get_issuer(&fingerprint).await?;
+    let Some(issuer) = db.get_issuer(&fingerprint).await? else {
+        return Err(warp::reject::not_found());
+    };
     let sigs = db.get_sigs_for_issuer(&fingerprint).await?;
 
     let html = hbs.render(

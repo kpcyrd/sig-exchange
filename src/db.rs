@@ -2,6 +2,7 @@ use crate::{
     errors::{ApiResult as Result, *},
     issuer::Issuer,
     pgp::PgpSig,
+    pkg::{Pkg, Upstream},
 };
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
 use std::env;
@@ -41,6 +42,7 @@ impl Client {
     }
 
     pub async fn insert_issuer(&self, issuer: &Issuer) -> Result<()> {
+        info!("Inserting issuer: {issuer:?}");
         let _result = sqlx::query(
             "INSERT INTO issuers (fingerprint, family)
             VALUES ($1, $2)
@@ -54,10 +56,10 @@ impl Client {
         Ok(())
     }
 
-    pub async fn get_issuer(&self, fingerprint: &str) -> Result<Issuer> {
+    pub async fn get_issuer(&self, fingerprint: &str) -> Result<Option<Issuer>> {
         let issuer = sqlx::query_as::<_, Issuer>("SELECT * FROM issuers WHERE fingerprint = $1")
             .bind(fingerprint)
-            .fetch_one(&self.pool)
+            .fetch_optional(&self.pool)
             .await?;
         Ok(issuer)
     }
@@ -105,5 +107,41 @@ impl Client {
         .fetch_all(&self.pool)
         .await?;
         Ok(sigs)
+    }
+
+    pub async fn insert_upstream(&self, upstream: &Upstream) -> Result<()> {
+        info!("Inserting upstream: {upstream:?}");
+        let _result = sqlx::query(
+            "INSERT INTO upstreams (os, name, issuer, last_observed)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (os, name, issuer) DO UPDATE SET
+            last_observed = GREATEST(upstreams.last_observed, EXCLUDED.last_observed)
+            ",
+        )
+        .bind(&upstream.os)
+        .bind(&upstream.name)
+        .bind(&upstream.issuer)
+        .bind(&upstream.last_observed)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn insert_pkg(&self, pkg: &Pkg) -> Result<()> {
+        info!("Inserting pkg: {pkg:?}");
+        let _result = sqlx::query(
+            "INSERT INTO pkgs (os, name, version, release_datetime)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (os, name, version) DO UPDATE SET
+            release_datetime = GREATEST(pkgs.release_datetime, EXCLUDED.release_datetime)
+            ",
+        )
+        .bind(&pkg.os)
+        .bind(&pkg.name)
+        .bind(&pkg.version)
+        .bind(&pkg.release_datetime)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 }

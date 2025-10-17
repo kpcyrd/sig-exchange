@@ -6,6 +6,7 @@ mod errors;
 mod import;
 mod issuer;
 mod pgp;
+mod pkg;
 mod plumbing;
 mod sig;
 mod srcinfo;

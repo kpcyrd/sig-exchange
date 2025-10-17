@@ -28,6 +28,7 @@ pub struct Web {
 
 #[derive(Debug, Parser)]
 pub enum Import {
+    ArchlinuxTar { path: PathBuf },
     PgpSigs { path: PathBuf },
 }
 
