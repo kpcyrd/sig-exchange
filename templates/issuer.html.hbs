@@ -3,7 +3,13 @@ sig.exchange
 {{/inline}}
 {{#*inline "page"}}
 
-<p>issuer id: {{ id }}</p>
+<h2>{{ issuer.family }} key: {{ issuer.fingerprint }}</h2>
+
+<ul>
+{{#each sigs}}
+    <li><a href="/sig/{{ this.chksum }}">{{ this.chksum }}</a> - (hash_algo={{ this.hash_algo }}, creation_time={{ this.creation_time }}, digest_prefix={{ this.digest_prefix }})</li>
+{{/each}}
+</ul>
 
 {{/inline}}
 {{> base.html.hbs }}

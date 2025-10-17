@@ -22,6 +22,7 @@ struct Handlebars {
 impl Handlebars {
     fn new() -> Result<Handlebars> {
         let mut hbs = handlebars::Handlebars::new();
+        hbs.set_prevent_indent(true);
         hbs.register_embed_templates::<Assets>()?;
         Ok(Self { hbs })
     }
@@ -62,14 +63,27 @@ async fn get_sig(
     db: db::Client,
     chksum: String,
 ) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
-    let html = hbs.render(
-        "sig.html.hbs",
-        &serde_json::json!({
-            "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
-            "id": chksum,
-        }),
-    )?;
-    Ok(Box::new(warp::reply::html(html)))
+    let (chksum, download) = chksum
+        .strip_suffix(".asc")
+        .map(|c| (c, true))
+        .unwrap_or((&chksum, false));
+    let sig = db.get_sig(&chksum).await?;
+    let armored = sig.to_ascii_armored().map_err(ApiError::from)?;
+
+    if download {
+        let response = warp::reply::with_status(armored, StatusCode::OK);
+        Ok(Box::new(response))
+    } else {
+        let html = hbs.render(
+            "sig.html.hbs",
+            &serde_json::json!({
+                "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
+                "sig": sig,
+                "armored": armored,
+            }),
+        )?;
+        Ok(Box::new(warp::reply::html(html)))
+    }
 }
 
 async fn get_issuer(
@@ -77,11 +91,15 @@ async fn get_issuer(
     db: db::Client,
     fingerprint: String,
 ) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
+    let issuer = db.get_issuer(&fingerprint).await?;
+    let sigs = db.get_sigs_for_issuer(&fingerprint).await?;
+
     let html = hbs.render(
         "issuer.html.hbs",
         &serde_json::json!({
             "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
-            "id": fingerprint,
+            "issuer": issuer,
+            "sigs": sigs,
         }),
     )?;
     Ok(Box::new(warp::reply::html(html)))
@@ -146,11 +164,12 @@ pub async fn run(args: &args::Web) -> Result<()> {
         .and(warp::path::end())
         .and_then(style);
 
-    let search = warp::post()
+    let search = warp::any()
         .and(db.clone())
-        .and(warp::body::json())
         .and(warp::path("search"))
         .and(warp::path::end())
+        .and(warp::post())
+        .and(warp::body::json())
         .and_then(search);
 
     let get_sig = warp::get()

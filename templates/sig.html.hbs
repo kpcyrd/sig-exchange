@@ -3,7 +3,19 @@ sig.exchange
 {{/inline}}
 {{#*inline "page"}}
 
-<p>sig id: {{ id }}</p>
+<h2>{{ sig.family }} sig: {{ sig.chksum }}</h2>
+
+<pre>
+Issuer: <a href="/issuer/{{ sig.issuer }}">{{ sig.issuer }}</a>
+Sig type: {{ sig.sig_type }}
+Sig version: {{ sig.sig_version }}
+Hash algo: {{ sig.hash_algo }}
+Sig algo: {{ sig.sig_algo }}
+Creation time: {{ sig.creation_time }}
+Digest prefix: {{ sig.digest_prefix }}
+</pre>
+
+<pre>{{ armored }}</pre>
 
 {{/inline}}
 {{> base.html.hbs }}

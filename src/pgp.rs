@@ -1,14 +1,20 @@
-use crate::errors::*;
+use crate::{errors::*, sig};
 use chrono::{DateTime, Utc};
 use sequoia_openpgp::{
-    Packet, PacketPile,
+    Packet, PacketPile, armor,
     packet::{Signature, signature::subpacket::SubpacketValue},
     parse::Parse,
-    serialize::Serialize as _,
+    serialize::{
+        Serialize as _,
+        stream::{Armorer, Message},
+    },
     types::{HashAlgorithm, PublicKeyAlgorithm},
 };
 use serde::Serialize;
-use std::{io::Cursor, time::UNIX_EPOCH};
+use std::{
+    io::{Cursor, Write},
+    time::UNIX_EPOCH,
+};
 
 #[derive(sqlx::FromRow, Debug, Serialize, PartialEq)]
 pub struct PgpSig {
@@ -22,6 +28,22 @@ pub struct PgpSig {
     pub creation_time: Option<DateTime<Utc>>,
     pub digest_prefix: String,
     pub bytes: Vec<u8>,
+}
+
+impl PgpSig {
+    pub fn to_ascii_armored(&self) -> Result<String> {
+        let mut sink = Vec::new();
+
+        {
+            let message = Message::new(&mut sink);
+            let mut message = Armorer::new(message).kind(armor::Kind::Signature).build()?;
+            message.write_all(&self.bytes)?;
+            message.finalize()?;
+        }
+
+        let armored = String::from_utf8(sink)?;
+        Ok(armored)
+    }
 }
 
 fn split(content: &str) -> Vec<&str> {
@@ -57,11 +79,6 @@ fn encode(sig: Signature) -> Result<Vec<u8>> {
     let mut buf = Vec::new();
     p.serialize(&mut buf)?;
     Ok(buf)
-}
-
-fn chksum(sig: &[u8]) -> String {
-    let chksum = blake3::hash(sig);
-    format!("blake3:{chksum}")
 }
 
 pub fn parse(content: &str) -> Result<Vec<PgpSig>> {
@@ -137,7 +154,7 @@ pub fn parse(content: &str) -> Result<Vec<PgpSig>> {
                         let sig = encode(sig)?;
 
                         let sig = PgpSig {
-                            chksum: chksum(&sig),
+                            chksum: sig::db_id(&sig),
                             family: "pgp".to_string(),
                             issuer,
                             sig_type: i16::from(sig_type),
@@ -258,9 +275,7 @@ D8HuQ5y6wuF2v9ikiJIA/1JRjc1j0jNr7+JihZln8qXiahqCBChUHxXWvm5CjWIy
             sigs,
             &[
                 PgpSig {
-                    chksum:
-                        "blake3:0b3644f7a642645362dece878541481275be9e32e14e6e668bb427f09983a0c4"
-                            .to_string(),
+                    chksum: "0b3644f7a642645362dece8785414812".to_string(),
                     family: "pgp".to_string(),
                     issuer: "101598dc823c1b5f9a6624aba5e0907a0380e6c3".to_string(),
                     sig_type: 0,
@@ -276,9 +291,7 @@ D8HuQ5y6wuF2v9ikiJIA/1JRjc1j0jNr7+JihZln8qXiahqCBChUHxXWvm5CjWIy
                     bytes: vec![]
                 },
                 PgpSig {
-                    chksum:
-                        "blake3:7946862be16e765a6b20e680b8d1c6f1813df871eec349e9fd6592be84cbdae4"
-                            .to_string(),
+                    chksum: "7946862be16e765a6b20e680b8d1c6f1".to_string(),
                     family: "pgp".to_string(),
                     issuer: "152812300785c96444d3334d17565732e08e5e41".to_string(),
                     sig_type: 0,
@@ -294,9 +307,7 @@ D8HuQ5y6wuF2v9ikiJIA/1JRjc1j0jNr7+JihZln8qXiahqCBChUHxXWvm5CjWIy
                     bytes: vec![]
                 },
                 PgpSig {
-                    chksum:
-                        "blake3:e05207afe12041471146eb6a0f228a87db1fdeeaba5ca4845b7ccc33009473c7"
-                            .to_string(),
+                    chksum: "e05207afe12041471146eb6a0f228a87".to_string(),
                     family: "pgp".to_string(),
                     issuer: "e61773cd6e01040e2f1bd78ce7e2984b6289c93a".to_string(),
                     sig_type: 0,
@@ -312,9 +323,7 @@ D8HuQ5y6wuF2v9ikiJIA/1JRjc1j0jNr7+JihZln8qXiahqCBChUHxXWvm5CjWIy
                     bytes: vec![]
                 },
                 PgpSig {
-                    chksum:
-                        "blake3:34f5fe1bee3fd6ab298bc23dfb1778e1cf1c72d4780f34a68963fc5035b6ed5a"
-                            .to_string(),
+                    chksum: "34f5fe1bee3fd6ab298bc23dfb1778e1".to_string(),
                     family: "pgp".to_string(),
                     issuer: "9deae0dc7063249fb05474681e4aed62986cd25d".to_string(),
                     sig_type: 0,
@@ -330,9 +339,7 @@ D8HuQ5y6wuF2v9ikiJIA/1JRjc1j0jNr7+JihZln8qXiahqCBChUHxXWvm5CjWIy
                     bytes: vec![]
                 },
                 PgpSig {
-                    chksum:
-                        "blake3:c29d7b936b21dc75eb13cc26e270cdc165168477ba1b4707ea3ce5f09023040d"
-                            .to_string(),
+                    chksum: "c29d7b936b21dc75eb13cc26e270cdc1".to_string(),
                     family: "pgp".to_string(),
                     issuer: "c388f6961fb972a95678e327f62711dbdca8ae56".to_string(),
                     sig_type: 0,
@@ -348,9 +355,7 @@ D8HuQ5y6wuF2v9ikiJIA/1JRjc1j0jNr7+JihZln8qXiahqCBChUHxXWvm5CjWIy
                     bytes: vec![]
                 },
                 PgpSig {
-                    chksum:
-                        "blake3:2672891ee5b2a4185d72cc63324edc2843bba45e920a6b2336c5b24245b4e94c"
-                            .to_string(),
+                    chksum: "2672891ee5b2a4185d72cc63324edc28".to_string(),
                     family: "pgp".to_string(),
                     issuer: "9d3cc86a72f8494342ea5fd10a41bdc3f4faff1c".to_string(),
                     sig_type: 0,
@@ -366,9 +371,7 @@ D8HuQ5y6wuF2v9ikiJIA/1JRjc1j0jNr7+JihZln8qXiahqCBChUHxXWvm5CjWIy
                     bytes: vec![]
                 },
                 PgpSig {
-                    chksum:
-                        "blake3:a638dc2c6d22847e68cf53ad9ea378071e6d4a9683a8a0a2355186faf2f5d7c9"
-                            .to_string(),
+                    chksum: "a638dc2c6d22847e68cf53ad9ea37807".to_string(),
                     family: "pgp".to_string(),
                     issuer: "637db1e23370f84aff88cce03152347d07da627c".to_string(),
                     sig_type: 0,
@@ -384,9 +387,7 @@ D8HuQ5y6wuF2v9ikiJIA/1JRjc1j0jNr7+JihZln8qXiahqCBChUHxXWvm5CjWIy
                     bytes: vec![]
                 },
                 PgpSig {
-                    chksum:
-                        "blake3:05c8a485f150e13745dbee16a41602a526a010b87848513588e01f96661ae65f"
-                            .to_string(),
+                    chksum: "05c8a485f150e13745dbee16a41602a5".to_string(),
                     family: "pgp".to_string(),
                     issuer: "f2cfc4abd0b99d837eebb7d09b79b45691db4173".to_string(),
                     sig_type: 0,
@@ -402,9 +403,7 @@ D8HuQ5y6wuF2v9ikiJIA/1JRjc1j0jNr7+JihZln8qXiahqCBChUHxXWvm5CjWIy
                     bytes: vec![]
                 },
                 PgpSig {
-                    chksum:
-                        "blake3:c6253e159288f6b756f4d3789d05f7c3f9b43e3b71abde9192684f7586dfb36a"
-                            .to_string(),
+                    chksum: "c6253e159288f6b756f4d3789d05f7c3".to_string(),
                     family: "pgp".to_string(),
                     issuer: "e86ae73439625bbee306aae6b66d427f873cb1a3".to_string(),
                     sig_type: 0,
@@ -420,9 +419,7 @@ D8HuQ5y6wuF2v9ikiJIA/1JRjc1j0jNr7+JihZln8qXiahqCBChUHxXWvm5CjWIy
                     bytes: vec![]
                 },
                 PgpSig {
-                    chksum:
-                        "blake3:c1d6a62f4890a3d48391b8e83ab5915214b7585d92c06d165fca23cac114db92"
-                            .to_string(),
+                    chksum: "c1d6a62f4890a3d48391b8e83ab59152".to_string(),
                     family: "pgp".to_string(),
                     issuer: "f19f5ff2b0589ec341220045ba03f4dbe0c63fb4".to_string(),
                     sig_type: 0,
@@ -438,9 +435,7 @@ D8HuQ5y6wuF2v9ikiJIA/1JRjc1j0jNr7+JihZln8qXiahqCBChUHxXWvm5CjWIy
                     bytes: vec![]
                 },
                 PgpSig {
-                    chksum:
-                        "blake3:dc1d68802daf2955e900b0e5438f08e3b59da6e3a62c0e5b3fa267e6ba74c3c6"
-                            .to_string(),
+                    chksum: "dc1d68802daf2955e900b0e5438f08e3".to_string(),
                     family: "pgp".to_string(),
                     issuer: "f4fc70f07310028424efc20a8e4256593f177720".to_string(),
                     sig_type: 0,
@@ -456,9 +451,7 @@ D8HuQ5y6wuF2v9ikiJIA/1JRjc1j0jNr7+JihZln8qXiahqCBChUHxXWvm5CjWIy
                     bytes: vec![]
                 },
                 PgpSig {
-                    chksum:
-                        "blake3:90a908f1b6dbfab27c9b26be26c6f6f73223cdbcccf2a5fe0850964416e99e32"
-                            .to_string(),
+                    chksum: "90a908f1b6dbfab27c9b26be26c6f6f7".to_string(),
                     family: "pgp".to_string(),
                     issuer: "a0083660f235a27000cd3c81ce6ec49945c17ea6".to_string(),
                     sig_type: 0,
@@ -474,9 +467,7 @@ D8HuQ5y6wuF2v9ikiJIA/1JRjc1j0jNr7+JihZln8qXiahqCBChUHxXWvm5CjWIy
                     bytes: vec![]
                 },
                 PgpSig {
-                    chksum:
-                        "blake3:2dd7b21df3ed9764975d38fc68ff8388dccf54fbaa7e73f842bc28523b7b6fae"
-                            .to_string(),
+                    chksum: "2dd7b21df3ed9764975d38fc68ff8388".to_string(),
                     family: "pgp".to_string(),
                     issuer: "0ccbaafd76a2ece2ccd3141de2ffd5b1d88ca97d".to_string(),
                     sig_type: 0,

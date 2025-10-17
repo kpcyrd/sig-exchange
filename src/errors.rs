@@ -6,6 +6,12 @@ pub use log::{debug, error, info, trace, warn};
 pub enum ApiError {
     #[error(transparent)]
     RenderError(#[from] handlebars::RenderError),
+    #[error(transparent)]
+    MigrateError(#[from] sqlx::migrate::MigrateError),
+    #[error(transparent)]
+    SqlxError(#[from] sqlx::Error),
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
 }
 
 // TODO: not sure if this is correct

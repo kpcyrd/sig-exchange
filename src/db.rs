@@ -1,4 +1,8 @@
-use crate::{errors::*, issuer::Issuer, pgp::PgpSig};
+use crate::{
+    errors::{ApiResult as Result, *},
+    issuer::Issuer,
+    pgp::PgpSig,
+};
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
 use std::env;
 
@@ -50,6 +54,14 @@ impl Client {
         Ok(())
     }
 
+    pub async fn get_issuer(&self, fingerprint: &str) -> Result<Issuer> {
+        let issuer = sqlx::query_as::<_, Issuer>("SELECT * FROM issuers WHERE fingerprint = $1")
+            .bind(fingerprint)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(issuer)
+    }
+
     pub async fn insert_sig(&self, sig: &PgpSig) -> Result<()> {
         let _result = sqlx::query(
             "INSERT INTO sigs (chksum, family, issuer, sig_type, sig_version, hash_algo, sig_algo, creation_time, digest_prefix, bytes)
@@ -72,11 +84,26 @@ impl Client {
         Ok(())
     }
 
+    pub async fn get_sig(&self, chksum: &str) -> Result<PgpSig> {
+        let sig = sqlx::query_as::<_, PgpSig>(
+            "SELECT * FROM sigs
+            WHERE chksum = $1",
+        )
+        .bind(chksum)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(sig)
+    }
+
     pub async fn get_sigs_for_issuer(&self, issuer: &str) -> Result<Vec<PgpSig>> {
-        let sigs = sqlx::query_as::<_, PgpSig>("SELECT * FROM sigs WHERE issuer = $1")
-            .bind(issuer)
-            .fetch_all(&self.pool)
-            .await?;
+        let sigs = sqlx::query_as::<_, PgpSig>(
+            "SELECT * FROM sigs
+            WHERE issuer = $1
+            ORDER BY creation_time DESC, chksum ASC",
+        )
+        .bind(issuer)
+        .fetch_all(&self.pool)
+        .await?;
         Ok(sigs)
     }
 }
