@@ -12,6 +12,7 @@ blake3 = "1.8.2"
 chrono = { version = "0.4.42", features = ["serde"] }
 clap = { version = "4.5.49", features = ["derive", "env"] }
 deb822-fast = "0.2.0"
+debian-changelog = "0.2.1"
 dotenvy = "0.15.7"
 env_logger = "0.11.8"
 handlebars = { version = "6.3.2", features = ["rust-embed"] }

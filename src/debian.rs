@@ -1,8 +1,10 @@
 use crate::errors::*;
 use crate::sig::RemoteSig;
 use async_compression::tokio::bufread::XzDecoder;
+use chrono::{DateTime, Utc};
+use debian_changelog::ChangeLog;
 use std::io::Read;
-use std::{collections::BTreeMap, path::Path};
+use std::{cmp, collections::BTreeMap};
 use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
 use tokio_stream::StreamExt;
 
@@ -103,28 +105,56 @@ pub fn parse_decompressed_reader_source_index<R: Read>(reader: R) -> Result<Vec<
     Ok(pkgs)
 }
 
-pub async fn parse_source_tar<R: AsyncRead + Unpin>(reader: R) -> Result<Option<String>> {
+pub async fn parse_source_tar<R: AsyncRead + Unpin>(
+    reader: R,
+) -> Result<(DateTime<Utc>, Option<String>)> {
     let reader = BufReader::new(reader);
     let reader = XzDecoder::new(reader);
 
     let mut tar = tokio_tar::Archive::new(reader);
     let mut entries = tar.entries()?;
 
+    let mut release_time = None;
+    let mut signing_keys = String::new();
     while let Some(entry) = entries.next().await {
         let mut entry = entry?;
         let path = entry.path()?;
-        if path != Path::new("debian/upstream/signing-key.asc") {
-            debug!("Found file in debian tar: {path:?}");
-            continue;
-        }
-        info!("Found file in debian tar: {path:?}");
 
-        let mut buf = String::new();
-        entry.read_to_string(&mut buf).await?;
-        return Ok(Some(buf));
+        match path.to_str() {
+            Some("debian/changelog") => {
+                info!("Found file in debian tar: {path:?}");
+
+                let mut buf = Vec::new();
+                entry.read_to_end(&mut buf).await?;
+
+                let changelog = ChangeLog::read(&buf[..])?;
+                for entry in changelog.iter() {
+                    let Some(datetime) = entry.datetime() else {
+                        continue;
+                    };
+                    let datetime = datetime.with_timezone(&Utc);
+                    release_time = cmp::max(release_time, Some(datetime));
+                }
+            }
+            Some("debian/upstream/signing-key.asc") => {
+                info!("Found file in debian tar: {path:?}");
+                entry.read_to_string(&mut signing_keys).await?;
+                if !signing_keys.ends_with('\n') {
+                    signing_keys.push('\n');
+                }
+            }
+            _ => {
+                debug!("Found file in debian tar: {path:?}");
+            }
+        }
     }
 
-    Ok(None)
+    let release_time = release_time.context("Failed to determine release datetime")?;
+
+    let signing_keys = Some(signing_keys);
+    let signing_keys = signing_keys.filter(|s| !s.is_empty());
+
+    Ok((release_time, signing_keys))
 }
 
 #[cfg(test)]
@@ -183,5 +213,18 @@ Section: net
                 }]
             }]
         );
+    }
+
+    #[tokio::test]
+    async fn test_parse_debian_tar() {
+        let data = include_bytes!("../test_data/2ping_4.5-1.2.debian.tar.xz");
+        let (release_time, signing_key) = parse_source_tar(&data[..]).await.unwrap();
+        assert_eq!(
+            release_time,
+            DateTime::parse_from_rfc3339("2023-11-27T11:51:56Z")
+                .unwrap()
+                .with_timezone(&Utc),
+        );
+        assert_eq!(signing_key.map(|s| s.len()), Some(3912));
     }
 }

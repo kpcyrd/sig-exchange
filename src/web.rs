@@ -67,7 +67,7 @@ async fn get_sig(
         .strip_suffix(".asc")
         .map(|c| (c, true))
         .unwrap_or((&chksum, false));
-    let sig = db.get_sig(&chksum).await?;
+    let sig = db.get_sig(chksum).await?;
     let armored = sig.to_ascii_armored().map_err(ApiError::from)?;
 
     if download {

@@ -8,8 +8,8 @@ pub async fn run(cmd: Plumbing) -> Result<()> {
             let file = fs::File::open(&path)
                 .await
                 .with_context(|| format!("Failed to open file: {path:?}"))?;
-            let key = archlinux::parse(file).await?;
-            println!("key={key:#?}");
+            let parsed = archlinux::parse(file).await?;
+            println!("parsed={parsed:#?}");
         }
         Plumbing::DebSrc { path } => {
             let file = fs::File::open(&path)
@@ -24,8 +24,8 @@ pub async fn run(cmd: Plumbing) -> Result<()> {
             let file = fs::File::open(&path)
                 .await
                 .with_context(|| format!("Failed to open file: {path:?}"))?;
-            let key = debian::parse_source_tar(file).await?;
-            println!("key={key:#?}");
+            let parsed = debian::parse_source_tar(file).await?;
+            println!("parsed={parsed:#?}");
         }
         Plumbing::Migrate => {
             let _db = db::Client::create().await?;

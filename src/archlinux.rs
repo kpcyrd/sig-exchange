@@ -1,9 +1,13 @@
 use crate::{errors::*, srcinfo};
 use async_compression::tokio::bufread::BzDecoder;
+use chrono::{DateTime, Utc};
+use std::cmp;
 use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
 use tokio_stream::StreamExt;
 
-pub async fn parse<R: AsyncRead + Unpin>(reader: R) -> Result<(Option<srcinfo::Pkg>, Vec<String>)> {
+pub async fn parse<R: AsyncRead + Unpin>(
+    reader: R,
+) -> Result<(Option<srcinfo::Pkg>, DateTime<Utc>, Vec<String>)> {
     let reader = BufReader::new(reader);
     let reader = BzDecoder::new(reader);
     let mut tar = tokio_tar::Archive::new(reader);
@@ -12,8 +16,13 @@ pub async fn parse<R: AsyncRead + Unpin>(reader: R) -> Result<(Option<srcinfo::P
     let mut srcinfo = None;
     let mut keys = Vec::new();
 
+    let mut release_time = None;
     while let Some(entry) = entries.next().await {
         let mut entry = entry?;
+        let mtime = entry.header().mtime()?;
+        let mtime = DateTime::from_timestamp_secs(mtime as i64);
+        release_time = cmp::max(release_time, mtime);
+
         let path = entry.path()?;
         let Some(path) = path.to_str() else {
             continue;
@@ -38,7 +47,8 @@ pub async fn parse<R: AsyncRead + Unpin>(reader: R) -> Result<(Option<srcinfo::P
         }
     }
 
-    Ok((srcinfo, keys))
+    let release_time = release_time.context("Failed to determine release datetime")?;
+    Ok((srcinfo, release_time, keys))
 }
 
 #[cfg(test)]
@@ -52,7 +62,7 @@ mod tests {
             "../test_data/rebuilderd-1a3fed9ab0e3828a968047735f752c171838724f.tar.bz2"
         );
 
-        let (srcinfo, keys) = parse(&data[..]).await.unwrap();
+        let (srcinfo, release_time, keys) = parse(&data[..]).await.unwrap();
         assert_eq!(srcinfo,
            Some(Pkg {
             name: "rebuilderd".to_string(),
@@ -67,6 +77,10 @@ mod tests {
             }],
         }
         ));
+        assert_eq!(
+            release_time,
+            DateTime::parse_from_rfc3339("2025-08-29T11:43:50Z").unwrap(),
+        );
         assert_eq!(
             keys,
             &[
