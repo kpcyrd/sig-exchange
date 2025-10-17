@@ -94,14 +94,39 @@ async fn get_issuer(
     let Some(issuer) = db.get_issuer(&fingerprint).await? else {
         return Err(warp::reject::not_found());
     };
-    let sigs = db.get_sigs_for_issuer(&fingerprint).await?;
+    let upstreams = db.list_upstreams_for_issuer(&fingerprint).await?;
+    let sigs = db.list_sigs_for_issuer(&fingerprint).await?;
 
     let html = hbs.render(
         "issuer.html.hbs",
         &serde_json::json!({
             "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
             "issuer": issuer,
+            "upstreams": upstreams,
             "sigs": sigs,
+        }),
+    )?;
+    Ok(Box::new(warp::reply::html(html)))
+}
+
+async fn get_pkg(
+    hbs: Arc<Handlebars>,
+    db: db::Client,
+    os: String,
+    name: String,
+) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
+    let pkgs = db.list_pkgs(&os, &name).await?;
+    if pkgs.is_empty() {
+        return Err(warp::reject::not_found());
+    };
+
+    let html = hbs.render(
+        "pkg.html.hbs",
+        &serde_json::json!({
+            "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
+            "os": os,
+            "name": name,
+            "pkgs": pkgs,
         }),
     )?;
     Ok(Box::new(warp::reply::html(html)))
@@ -190,8 +215,24 @@ pub async fn run(args: &args::Web) -> Result<()> {
         .and(warp::path::end())
         .and_then(get_issuer);
 
+    let get_pkg = warp::get()
+        .and(hbs.clone())
+        .and(db.clone())
+        .and(warp::path("pkg"))
+        .and(warp::path::param())
+        .and(warp::path::param())
+        .and(warp::path::end())
+        .and_then(get_pkg);
+
     let routes = warp::any()
-        .and(index.or(style).or(search).or(get_sig).or(get_issuer))
+        .and(
+            index
+                .or(style)
+                .or(get_sig)
+                .or(get_issuer)
+                .or(get_pkg)
+                .or(search),
+        )
         .recover(rejection)
         .with(log);
 

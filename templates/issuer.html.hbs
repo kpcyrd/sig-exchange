@@ -5,11 +5,24 @@
 
 <h2>{{ issuer.family }} key: {{ issuer.fingerprint }}</h2>
 
+{{#if upstreams}}
+<h3>Upstream of</h3>
 <ul>
-{{#each sigs}}
-    <li><a href="/sig/{{ this.chksum }}">{{ this.chksum }}</a> - (hash_algo={{ this.hash_algo }}, creation_time={{ this.creation_time }}, digest_prefix={{ this.digest_prefix }})</li>
-{{/each}}
+    {{#each upstreams}}
+    <li><a href="/pkg/{{ this.os }}/{{ this.name }}">{{ this.os }}/{{ this.name }}</a> - (last_observed={{ this.last_observed }})</li>
+    {{/each}}
 </ul>
+{{/if}}
+
+{{#if sigs}}
+<h3>Signatures</h3>
+<ul>
+    {{#each sigs}}
+    <li><a href="/sig/{{ this.chksum }}">{{ this.chksum }}</a> - (hash_algo={{ this.hash_algo }}, creation_time={{
+        this.creation_time }}, digest_prefix={{ this.digest_prefix }})</li>
+    {{/each}}
+</ul>
+{{/if}}
 
 {{/inline}}
 {{> base.html.hbs }}

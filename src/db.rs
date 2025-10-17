@@ -97,7 +97,7 @@ impl Client {
         Ok(sig)
     }
 
-    pub async fn get_sigs_for_issuer(&self, issuer: &str) -> Result<Vec<PgpSig>> {
+    pub async fn list_sigs_for_issuer(&self, issuer: &str) -> Result<Vec<PgpSig>> {
         let sigs = sqlx::query_as::<_, PgpSig>(
             "SELECT * FROM sigs
             WHERE issuer = $1
@@ -127,6 +127,19 @@ impl Client {
         Ok(())
     }
 
+    // TODO: include if this is still the latest release
+    pub async fn list_upstreams_for_issuer(&self, issuer: &str) -> Result<Vec<Upstream>> {
+        let upstreams = sqlx::query_as::<_, Upstream>(
+            "SELECT * FROM upstreams
+            WHERE issuer = $1
+            ORDER BY name ASC",
+        )
+        .bind(issuer)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(upstreams)
+    }
+
     pub async fn insert_pkg(&self, pkg: &Pkg) -> Result<()> {
         info!("Inserting pkg: {pkg:?}");
         let _result = sqlx::query(
@@ -143,5 +156,18 @@ impl Client {
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+
+    pub async fn list_pkgs(&self, os: &str, name: &str) -> Result<Vec<Pkg>> {
+        let pkgs = sqlx::query_as::<_, Pkg>(
+            "SELECT * FROM pkgs
+            WHERE os = $1 AND name = $2
+            ORDER BY name ASC, release_datetime DESC",
+        )
+        .bind(os)
+        .bind(name)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(pkgs)
     }
 }

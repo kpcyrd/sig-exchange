@@ -1,0 +1,27 @@
+{{#*inline "title"}}
+pkg: {{ os }}/{{ name }} - sig.exchange
+{{/inline}}
+{{#*inline "page"}}
+
+<h2>pkg: {{ os }}/{{ name }}</h2>
+
+{{#if upstreams}}
+<h3>Upstreams</h3>
+<ul>
+    {{#each upstreams}}
+    <li><a href="/pkg/{{ this.os }}/{{ this.name }}">{{ this.os }}/{{ this.name }}</a> - (last_observed={{ this.last_observed }})</li>
+    {{/each}}
+</ul>
+{{/if}}
+
+{{#if pkgs}}
+<h3>Releases</h3>
+<ul>
+    {{#each pkgs}}
+    <li><b>{{ this.os }}/{{ this.name }}</b>: {{ this.version }} (release_datetime={{ this.release_datetime }})</li>
+    {{/each}}
+</ul>
+{{/if}}
+
+{{/inline}}
+{{> base.html.hbs }}
