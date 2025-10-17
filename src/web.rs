@@ -114,6 +114,26 @@ async fn get_issuer(
     Ok(Box::new(warp::reply::html(html)))
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IssuerSearch {
+    pub fingerprint: String,
+}
+
+async fn search_issuer(
+    db: db::Client,
+    search: IssuerSearch,
+) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
+    let fingerprint = search.fingerprint.to_ascii_lowercase();
+
+    if let Some(issuer) = db.get_issuer(&fingerprint).await? {
+        let uri = format!("/issuer/{}", issuer.fingerprint);
+        let uri = uri.parse::<Uri>().map_err(ApiError::from)?;
+        return Ok(Box::new(warp::redirect::found(uri)));
+    } else {
+        return Ok(Box::new(warp::redirect::found(Uri::from_static("/"))));
+    }
+}
+
 async fn get_pkg(
     hbs: Arc<Handlebars>,
     db: db::Client,
@@ -255,6 +275,13 @@ pub async fn run(args: &args::Web) -> Result<()> {
         .and(warp::path::end())
         .and_then(get_issuer);
 
+    let search_issuer = warp::get()
+        .and(db.clone())
+        .and(warp::path("issuer"))
+        .and(warp::path::end())
+        .and(warp::query::<IssuerSearch>())
+        .and_then(search_issuer);
+
     let get_pkg = warp::get()
         .and(hbs.clone())
         .and(db.clone())
@@ -278,6 +305,7 @@ pub async fn run(args: &args::Web) -> Result<()> {
                 .or(style)
                 .or(get_sig)
                 .or(get_issuer)
+                .or(search_issuer)
                 .or(get_pkg)
                 .or(search_pkg)
                 .or(search),
