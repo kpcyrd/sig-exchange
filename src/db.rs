@@ -121,7 +121,7 @@ impl Client {
         .bind(&upstream.os)
         .bind(&upstream.name)
         .bind(&upstream.issuer)
-        .bind(&upstream.last_observed)
+        .bind(upstream.last_observed)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -152,7 +152,7 @@ impl Client {
         .bind(&pkg.os)
         .bind(&pkg.name)
         .bind(&pkg.version)
-        .bind(&pkg.release_datetime)
+        .bind(pkg.release_datetime)
         .execute(&self.pool)
         .await?;
         Ok(())

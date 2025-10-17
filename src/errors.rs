@@ -13,7 +13,7 @@ pub enum ApiError {
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
     #[error(transparent)]
-    Uri(#[from] warp::http::uri::InvalidUri)
+    Uri(#[from] warp::http::uri::InvalidUri),
 }
 
 // TODO: not sure if this is correct

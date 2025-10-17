@@ -54,13 +54,16 @@ async fn index(
     Ok(Box::new(warp::reply::html(html)))
 }
 
-async fn style() -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
-    let style = Assets::get("style.css").unwrap();
-
-    // TODO: avoid allocation if possible
-    let response = Response::new(style.data.to_vec().into());
-
-    Ok(Box::new(response))
+async fn style(filename: String) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
+    if filename.ends_with(".css")
+        && let Some(style) = Assets::get(&filename)
+    {
+        // TODO: avoid allocation if possible
+        let response = Response::new(style.data.to_vec().into());
+        Ok(Box::new(response))
+    } else {
+        Err(warp::reject::not_found())
+    }
 }
 
 async fn get_sig(
@@ -125,13 +128,14 @@ async fn search_issuer(
 ) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
     let fingerprint = search.fingerprint.to_ascii_lowercase();
 
-    if let Some(issuer) = db.get_issuer(&fingerprint).await? {
+    let uri = if let Some(issuer) = db.get_issuer(&fingerprint).await? {
         let uri = format!("/issuer/{}", issuer.fingerprint);
-        let uri = uri.parse::<Uri>().map_err(ApiError::from)?;
-        return Ok(Box::new(warp::redirect::found(uri)));
+        uri.parse::<Uri>().map_err(ApiError::from)?
     } else {
-        return Ok(Box::new(warp::redirect::found(Uri::from_static("/"))));
-    }
+        Uri::from_static("/")
+    };
+
+    Ok(Box::new(warp::redirect::found(uri)))
 }
 
 async fn get_pkg(
@@ -247,7 +251,7 @@ pub async fn run(args: &args::Web) -> Result<()> {
 
     let style = warp::get()
         .and(warp::path("assets"))
-        .and(warp::path("style.css"))
+        .and(warp::path::param())
         .and(warp::path::end())
         .and_then(style);
 
