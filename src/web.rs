@@ -1,3 +1,7 @@
+mod issuer;
+mod pkg;
+mod sig;
+
 use crate::args;
 use crate::db;
 use crate::errors::*;
@@ -7,12 +11,7 @@ use serde_json::json;
 use std::convert::Infallible;
 use std::result;
 use std::sync::Arc;
-use warp::{
-    Filter,
-    http::{StatusCode, Uri},
-    reject::MethodNotAllowed,
-    reply::Response,
-};
+use warp::{Filter, http::StatusCode, reject::MethodNotAllowed, reply::Response};
 
 #[derive(RustEmbed)]
 #[folder = "templates"]
@@ -64,136 +63,6 @@ async fn style(filename: String) -> result::Result<Box<dyn warp::Reply>, warp::R
     } else {
         Err(warp::reject::not_found())
     }
-}
-
-async fn get_sig(
-    hbs: Arc<Handlebars>,
-    db: db::Client,
-    chksum: String,
-) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
-    let (chksum, download) = chksum
-        .strip_suffix(".asc")
-        .map(|c| (c, true))
-        .unwrap_or((&chksum, false));
-    let sig = db.get_sig(chksum).await?;
-    let armored = sig.to_ascii_armored().map_err(ApiError::from)?;
-
-    if download {
-        let response = warp::reply::with_status(armored, StatusCode::OK);
-        Ok(Box::new(response))
-    } else {
-        let html = hbs.render(
-            "sig.html.hbs",
-            &serde_json::json!({
-                "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
-                "sig": sig,
-                "armored": armored,
-            }),
-        )?;
-        Ok(Box::new(warp::reply::html(html)))
-    }
-}
-
-async fn get_issuer(
-    hbs: Arc<Handlebars>,
-    db: db::Client,
-    fingerprint: String,
-) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
-    let Some(issuer) = db.get_issuer(&fingerprint).await? else {
-        return Err(warp::reject::not_found());
-    };
-    let upstreams = db.list_upstreams_for_issuer(&fingerprint).await?;
-    let sigs = db.list_sigs_for_issuer(&fingerprint).await?;
-
-    let html = hbs.render(
-        "issuer.html.hbs",
-        &serde_json::json!({
-            "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
-            "issuer": issuer,
-            "upstreams": upstreams,
-            "sigs": sigs,
-        }),
-    )?;
-    Ok(Box::new(warp::reply::html(html)))
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IssuerSearch {
-    pub fingerprint: String,
-}
-
-async fn search_issuer(
-    db: db::Client,
-    search: IssuerSearch,
-) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
-    let fingerprint = search.fingerprint.to_ascii_lowercase();
-
-    let uri = if let Some(issuer) = db.get_issuer(&fingerprint).await? {
-        let uri = format!("/issuer/{}", issuer.fingerprint);
-        uri.parse::<Uri>().map_err(ApiError::from)?
-    } else {
-        Uri::from_static("/")
-    };
-
-    Ok(Box::new(warp::redirect::found(uri)))
-}
-
-async fn get_pkg(
-    hbs: Arc<Handlebars>,
-    db: db::Client,
-    os: String,
-    name: String,
-) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
-    let pkgs = db.list_pkgs(&os, &name).await?;
-    if pkgs.is_empty() {
-        return Err(warp::reject::not_found());
-    };
-
-    let html = hbs.render(
-        "pkg.html.hbs",
-        &serde_json::json!({
-            "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
-            "os": os,
-            "name": name,
-            "pkgs": pkgs,
-        }),
-    )?;
-    Ok(Box::new(warp::reply::html(html)))
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PkgSearch {
-    pub name: String,
-}
-
-async fn search_pkg(
-    hbs: Arc<Handlebars>,
-    db: db::Client,
-    search: PkgSearch,
-) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
-    let pkgs = db.search_pkgs_by_name(&search.name).await?;
-
-    let Some(first) = pkgs.first() else {
-        return Ok(Box::new(warp::redirect::found(Uri::from_static("/"))));
-    };
-
-    if pkgs.len() == 1 {
-        let (os, name) = first;
-        let uri = format!("/pkg/{os}/{name}");
-        let uri = uri.parse::<Uri>().map_err(ApiError::from)?;
-        return Ok(Box::new(warp::redirect::found(uri)));
-    }
-
-    let html = hbs.render(
-        "pkg_search.html.hbs",
-        &serde_json::json!({
-            "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
-            "name": search.name,
-            "pkgs": pkgs,
-        }),
-    )?;
-
-    Ok(Box::new(warp::reply::html(html)))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -269,7 +138,7 @@ pub async fn run(args: &args::Web) -> Result<()> {
         .and(warp::path("-"))
         .and(warp::path::param())
         .and(warp::path::end())
-        .and_then(get_sig);
+        .and_then(sig::get);
 
     let get_issuer = warp::get()
         .and(hbs.clone())
@@ -277,14 +146,14 @@ pub async fn run(args: &args::Web) -> Result<()> {
         .and(warp::path("issuer"))
         .and(warp::path::param())
         .and(warp::path::end())
-        .and_then(get_issuer);
+        .and_then(issuer::get);
 
     let search_issuer = warp::get()
         .and(db.clone())
         .and(warp::path("issuer"))
         .and(warp::path::end())
-        .and(warp::query::<IssuerSearch>())
-        .and_then(search_issuer);
+        .and(warp::query::<issuer::IssuerSearch>())
+        .and_then(issuer::search);
 
     let get_pkg = warp::get()
         .and(hbs.clone())
@@ -293,15 +162,15 @@ pub async fn run(args: &args::Web) -> Result<()> {
         .and(warp::path::param())
         .and(warp::path::param())
         .and(warp::path::end())
-        .and_then(get_pkg);
+        .and_then(pkg::get);
 
     let search_pkg = warp::get()
         .and(hbs.clone())
         .and(db.clone())
         .and(warp::path("pkg"))
         .and(warp::path::end())
-        .and(warp::query::<PkgSearch>())
-        .and_then(search_pkg);
+        .and(warp::query::<pkg::PkgSearch>())
+        .and_then(pkg::search);
 
     let routes = warp::any()
         .and(
