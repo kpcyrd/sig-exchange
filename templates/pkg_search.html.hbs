@@ -1,0 +1,17 @@
+{{#*inline "title"}}
+pkg search: {{ name }} - sig.exchange
+{{/inline}}
+{{#*inline "page"}}
+
+<h2>pkg search: {{ name }}</h2>
+
+{{#if pkgs}}
+<ul>
+    {{#each pkgs}}
+    <li><a href="/pkg/{{ this.0 }}/{{ this.1 }}">{{ this.0 }}/{{ this.1 }}</a></li>
+    {{/each}}
+</ul>
+{{/if}}
+
+{{/inline}}
+{{> base.html.hbs }}

@@ -7,7 +7,12 @@ use serde_json::json;
 use std::convert::Infallible;
 use std::result;
 use std::sync::Arc;
-use warp::{Filter, http::StatusCode, reject::MethodNotAllowed, reply::Response};
+use warp::{
+    Filter,
+    http::{StatusCode, Uri},
+    reject::MethodNotAllowed,
+    reply::Response,
+};
 
 #[derive(RustEmbed)]
 #[folder = "templates"]
@@ -133,6 +138,41 @@ async fn get_pkg(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PkgSearch {
+    pub name: String,
+}
+
+async fn search_pkg(
+    hbs: Arc<Handlebars>,
+    db: db::Client,
+    search: PkgSearch,
+) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
+    let pkgs = db.search_pkgs_by_name(&search.name).await?;
+
+    let Some(first) = pkgs.first() else {
+        return Ok(Box::new(warp::redirect::found(Uri::from_static("/"))));
+    };
+
+    if pkgs.len() == 1 {
+        let (os, name) = first;
+        let uri = format!("/pkg/{os}/{name}");
+        let uri = uri.parse::<Uri>().map_err(ApiError::from)?;
+        return Ok(Box::new(warp::redirect::found(uri)));
+    }
+
+    let html = hbs.render(
+        "pkg_search.html.hbs",
+        &serde_json::json!({
+            "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
+            "name": search.name,
+            "pkgs": pkgs,
+        }),
+    )?;
+
+    Ok(Box::new(warp::reply::html(html)))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Search {
     pub query: String,
 }
@@ -224,6 +264,14 @@ pub async fn run(args: &args::Web) -> Result<()> {
         .and(warp::path::end())
         .and_then(get_pkg);
 
+    let search_pkg = warp::get()
+        .and(hbs.clone())
+        .and(db.clone())
+        .and(warp::path("pkg"))
+        .and(warp::path::end())
+        .and(warp::query::<PkgSearch>())
+        .and_then(search_pkg);
+
     let routes = warp::any()
         .and(
             index
@@ -231,6 +279,7 @@ pub async fn run(args: &args::Web) -> Result<()> {
                 .or(get_sig)
                 .or(get_issuer)
                 .or(get_pkg)
+                .or(search_pkg)
                 .or(search),
         )
         .recover(rejection)

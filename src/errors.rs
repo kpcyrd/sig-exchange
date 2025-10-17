@@ -12,6 +12,8 @@ pub enum ApiError {
     SqlxError(#[from] sqlx::Error),
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+    #[error(transparent)]
+    Uri(#[from] warp::http::uri::InvalidUri)
 }
 
 // TODO: not sure if this is correct

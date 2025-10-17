@@ -170,4 +170,16 @@ impl Client {
         .await?;
         Ok(pkgs)
     }
+
+    pub async fn search_pkgs_by_name(&self, name: &str) -> Result<Vec<(String, String)>> {
+        let pkgs = sqlx::query_as::<_, (String, String)>(
+            "SELECT DISTINCT os, name FROM pkgs
+            WHERE name = $1
+            ORDER BY os ASC, name ASC",
+        )
+        .bind(name)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(pkgs)
+    }
 }
