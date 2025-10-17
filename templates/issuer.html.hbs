@@ -18,7 +18,7 @@
 <h3>Signatures</h3>
 <ul>
     {{#each sigs}}
-    <li><a href="/sig/{{ this.chksum }}">{{ this.chksum }}</a> - (hash_algo={{ this.hash_algo }}, creation_time={{
+    <li><a href="/-/{{ this.chksum }}">{{ this.chksum }}</a> - (hash_algo={{ this.hash_algo }}, creation_time={{
         this.creation_time }}, digest_prefix={{ this.digest_prefix }})</li>
     {{/each}}
 </ul>

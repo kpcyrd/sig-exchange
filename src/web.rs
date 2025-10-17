@@ -266,7 +266,7 @@ pub async fn run(args: &args::Web) -> Result<()> {
     let get_sig = warp::get()
         .and(hbs.clone())
         .and(db.clone())
-        .and(warp::path("sig"))
+        .and(warp::path("-"))
         .and(warp::path::param())
         .and(warp::path::end())
         .and_then(get_sig);
