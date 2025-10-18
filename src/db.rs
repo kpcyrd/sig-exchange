@@ -7,7 +7,6 @@ use crate::{
 use chrono::{DateTime, Utc};
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
 use std::env;
-use tokio_stream::StreamExt;
 
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -134,15 +133,15 @@ impl Client {
         issuer: &str,
     ) -> Result<Vec<(Upstream, DateTime<Utc>)>> {
         #[derive(sqlx::FromRow)]
-        pub struct UpstreamWithExtra {
-            pub os: String,
-            pub name: String,
-            pub issuer: String,
-            pub last_observed: DateTime<Utc>,
-            pub latest_release: DateTime<Utc>,
+        struct UpstreamWithExtra {
+            os: String,
+            name: String,
+            issuer: String,
+            last_observed: DateTime<Utc>,
+            latest_release: DateTime<Utc>,
         }
 
-        let stream = sqlx::query_as::<_, UpstreamWithExtra>(
+        let upstreams = sqlx::query_as::<_, UpstreamWithExtra>(
             "SELECT u.*, (
                 SELECT MAX(release_datetime) FROM pkgs as p
                 WHERE p.os = u.os AND p.name = u.name
@@ -151,24 +150,21 @@ impl Client {
             ORDER BY name ASC",
         )
         .bind(issuer)
-        .fetch(&self.pool);
-
-        let upstreams = stream
-            .map(|row| {
-                row.map(|upstream| {
-                    (
-                        Upstream {
-                            os: upstream.os,
-                            name: upstream.name,
-                            issuer: upstream.issuer,
-                            last_observed: upstream.last_observed,
-                        },
-                        upstream.latest_release,
-                    )
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .await?;
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .map(|upstream| {
+            (
+                Upstream {
+                    os: upstream.os,
+                    name: upstream.name,
+                    issuer: upstream.issuer,
+                    last_observed: upstream.last_observed,
+                },
+                upstream.latest_release,
+            )
+        })
+        .collect();
 
         Ok(upstreams)
     }
@@ -180,15 +176,15 @@ impl Client {
         latest: DateTime<Utc>,
     ) -> Result<Vec<(Upstream, u64)>> {
         #[derive(sqlx::FromRow)]
-        pub struct UpstreamWithExtra {
-            pub os: String,
-            pub name: String,
-            pub issuer: String,
-            pub last_observed: DateTime<Utc>,
-            pub pkgs: i64,
+        struct UpstreamWithExtra {
+            os: String,
+            name: String,
+            issuer: String,
+            last_observed: DateTime<Utc>,
+            pkgs: i64,
         }
 
-        let stream = sqlx::query_as::<_, UpstreamWithExtra>(
+        let upstreams = sqlx::query_as::<_, UpstreamWithExtra>(
             "SELECT u.*, (
                 SELECT COUNT(*) FROM upstreams as u2
                 WHERE u2.issuer = u.issuer AND u2.last_observed = (
@@ -202,24 +198,21 @@ impl Client {
         .bind(os)
         .bind(name)
         .bind(latest)
-        .fetch(&self.pool);
-
-        let upstreams = stream
-            .map(|row| {
-                row.map(|upstream| {
-                    (
-                        Upstream {
-                            os: upstream.os,
-                            name: upstream.name,
-                            issuer: upstream.issuer,
-                            last_observed: upstream.last_observed,
-                        },
-                        upstream.pkgs as u64,
-                    )
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .await?;
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .map(|upstream| {
+            (
+                Upstream {
+                    os: upstream.os,
+                    name: upstream.name,
+                    issuer: upstream.issuer,
+                    last_observed: upstream.last_observed,
+                },
+                upstream.pkgs as u64,
+            )
+        })
+        .collect();
 
         Ok(upstreams)
     }
@@ -256,18 +249,17 @@ impl Client {
     }
 
     pub async fn list_os_pkgs(&self, os: &str) -> Result<Vec<String>> {
-        let stream = sqlx::query_as::<_, (String,)>(
+        let pkgs = sqlx::query_as::<_, (String,)>(
             "SELECT DISTINCT name FROM pkgs
             WHERE os = $1
             ORDER BY name ASC",
         )
         .bind(os)
-        .fetch(&self.pool);
-
-        let pkgs = stream
-            .map(|row| row.map(|(name,)| name))
-            .collect::<Result<Vec<_>, _>>()
-            .await?;
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .map(|(name,)| name)
+        .collect();
 
         Ok(pkgs)
     }
