@@ -173,6 +173,25 @@ impl Client {
         Ok(upstreams)
     }
 
+    pub async fn list_upstreams_for_pkg(
+        &self,
+        os: &str,
+        name: &str,
+        latest: DateTime<Utc>,
+    ) -> Result<Vec<Upstream>> {
+        let upstreams = sqlx::query_as::<_, Upstream>(
+            "SELECT * FROM upstreams
+            WHERE os = $1 AND name = $2 AND last_observed = $3
+            ORDER BY issuer ASC",
+        )
+        .bind(os)
+        .bind(name)
+        .bind(latest)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(upstreams)
+    }
+
     pub async fn insert_pkg(&self, pkg: &Pkg) -> Result<()> {
         info!("Inserting pkg: {pkg:?}");
         let _result = sqlx::query(

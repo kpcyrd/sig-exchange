@@ -14,15 +14,19 @@ pub(super) async fn get(
     name: String,
 ) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
     let pkgs = db.list_pkgs(&os, &name).await?;
-    if pkgs.is_empty() {
+
+    let Some(latest) = pkgs.iter().map(|p| p.release_datetime).max() else {
         return Err(warp::reject::not_found());
     };
+
+    let upstreams = db.list_upstreams_for_pkg(&os, &name, latest).await?;
 
     let html = hbs.render(
         "pkg.html.hbs",
         &serde_json::json!({
             "os": os,
             "name": name,
+            "upstreams": upstreams,
             "pkgs": pkgs,
         }),
     )?;
