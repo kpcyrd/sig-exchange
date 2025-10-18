@@ -1,7 +1,9 @@
 use crate::db;
 use crate::errors::*;
 use bytes::Bytes;
+use std::env;
 use std::pin::Pin;
+use std::time::Duration;
 use tokio::io;
 use tokio_stream::{Stream, StreamExt};
 
@@ -28,7 +30,17 @@ pub struct Client {
 
 impl Client {
     pub fn new(db: db::Client) -> Result<Self> {
-        let client = reqwest::Client::builder().build()?;
+        let mut builder = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .read_timeout(Duration::from_secs(80));
+
+        if let Ok(proxy) = env::var("PROXY") {
+            // PROXY=socks5h://127.0.0.1:1080
+            builder = builder.proxy(reqwest::Proxy::all(&proxy)?);
+        }
+
+        let client = builder.build()?;
+
         Ok(Self { client, db })
     }
 
