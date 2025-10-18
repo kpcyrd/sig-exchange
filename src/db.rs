@@ -6,6 +6,7 @@ use crate::{
 };
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
 use std::env;
+use tokio_stream::StreamExt;
 
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -168,6 +169,23 @@ impl Client {
         .bind(name)
         .fetch_all(&self.pool)
         .await?;
+        Ok(pkgs)
+    }
+
+    pub async fn list_os_pkgs(&self, os: &str) -> Result<Vec<String>> {
+        let stream = sqlx::query_as::<_, (String,)>(
+            "SELECT DISTINCT name FROM pkgs
+            WHERE os = $1
+            ORDER BY name ASC",
+        )
+        .bind(os)
+        .fetch(&self.pool);
+
+        let pkgs = stream
+            .map(|row| row.map(|(name,)| name))
+            .collect::<Result<Vec<_>, _>>()
+            .await?;
+
         Ok(pkgs)
     }
 

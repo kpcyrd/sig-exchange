@@ -186,6 +186,15 @@ pub async fn run(args: &args::Web) -> Result<()> {
         .and_then(pkg::get)
         .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
 
+    let list_os_pkgs = warp::get()
+        .and(hbs.clone())
+        .and(db.clone())
+        .and(warp::path("pkg"))
+        .and(warp::path::param())
+        .and(warp::path::end())
+        .and_then(pkg::list_for_os)
+        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
+
     let search_pkg = warp::get()
         .and(hbs.clone())
         .and(db.clone())
@@ -211,6 +220,7 @@ pub async fn run(args: &args::Web) -> Result<()> {
                 .or(get_issuer)
                 .or(search_issuer)
                 .or(get_pkg)
+                .or(list_os_pkgs)
                 .or(search_pkg)
                 .or(search)
                 .or(cache),

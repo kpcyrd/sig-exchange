@@ -19,4 +19,4 @@ pub enum ApiError {
 // TODO: not sure if this is correct
 impl warp::reject::Reject for ApiError {}
 
-pub type ApiResult<T> = std::result::Result<T, ApiError>;
+pub type ApiResult<T, E = ApiError> = std::result::Result<T, E>;

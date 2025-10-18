@@ -29,6 +29,26 @@ pub(super) async fn get(
     Ok(Box::new(warp::reply::html(html)))
 }
 
+pub(super) async fn list_for_os(
+    hbs: Arc<Handlebars>,
+    db: db::Client,
+    os: String,
+) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
+    let pkgs = db.list_os_pkgs(&os).await?;
+    if pkgs.is_empty() {
+        return Err(warp::reject::not_found());
+    };
+
+    let html = hbs.render(
+        "pkg_os.html.hbs",
+        &serde_json::json!({
+            "os": os,
+            "pkgs": pkgs,
+        }),
+    )?;
+    Ok(Box::new(warp::reply::html(html)))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct PkgSearch {
     pub name: String,

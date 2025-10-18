@@ -1,0 +1,15 @@
+{{#*inline "title"}}
+{{ os }} pkgs - sig.exchange
+{{/inline}}
+{{#*inline "page"}}
+
+<h2>{{ os }} pkgs</h2>
+
+<ul>
+    {{#each pkgs}}
+    <li><a href="/pkg/{{ ../os }}/{{ this }}">{{ this }}</a></li>
+    {{/each}}
+</ul>
+
+{{/inline}}
+{{> base.html.hbs }}
