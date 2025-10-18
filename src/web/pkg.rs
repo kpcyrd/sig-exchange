@@ -21,7 +21,6 @@ pub(super) async fn get(
     let html = hbs.render(
         "pkg.html.hbs",
         &serde_json::json!({
-            "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
             "os": os,
             "name": name,
             "pkgs": pkgs,
@@ -56,7 +55,6 @@ pub(super) async fn search(
     let html = hbs.render(
         "pkg_search.html.hbs",
         &serde_json::json!({
-            "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
             "name": search.name,
             "pkgs": pkgs,
         }),

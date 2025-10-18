@@ -24,7 +24,6 @@ pub(super) async fn get(
         let html = hbs.render(
             "sig.html.hbs",
             &serde_json::json!({
-                "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
                 "sig": sig,
                 "armored": armored,
             }),

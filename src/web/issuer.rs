@@ -21,7 +21,6 @@ pub(super) async fn get(
     let html = hbs.render(
         "issuer.html.hbs",
         &serde_json::json!({
-            "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
             "issuer": issuer,
             "upstreams": upstreams,
             "sigs": sigs,

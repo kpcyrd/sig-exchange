@@ -12,7 +12,15 @@ use std::convert::Infallible;
 use std::result;
 use std::sync::Arc;
 use warp::reply::Reply;
-use warp::{Filter, http::StatusCode, reject::MethodNotAllowed, reply::Response};
+use warp::{
+    Filter,
+    http::{HeaderValue, StatusCode, header},
+    reject::MethodNotAllowed,
+    reply::Response,
+};
+
+const CACHE_CONTROL_DEFAULT: HeaderValue =
+    HeaderValue::from_static("public, max-age=600, stale-while-revalidate=300, stale-if-error=300");
 
 #[derive(RustEmbed)]
 #[folder = "templates"]
@@ -41,16 +49,14 @@ impl Handlebars {
     }
 }
 
+fn cache_control(reply: impl warp::Reply, value: HeaderValue) -> impl warp::Reply {
+    warp::reply::with_header(reply, header::CACHE_CONTROL, value)
+}
+
 async fn index(
     hbs: Arc<Handlebars>,
-    db: db::Client,
 ) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
-    let html = hbs.render(
-        "index.html.hbs",
-        &serde_json::json!({
-            "db_version": db.ping().await.unwrap_or_else(|_| "unknown".to_string()),
-        }),
-    )?;
+    let html = hbs.render("index.html.hbs", &serde_json::json!({}))?;
     Ok(Box::new(warp::reply::html(html)))
 }
 
@@ -125,15 +131,16 @@ pub async fn run(args: &args::Web) -> Result<()> {
 
     let index = warp::get()
         .and(hbs.clone())
-        .and(db.clone())
         .and(warp::path::end())
-        .and_then(index);
+        .and_then(index)
+        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
 
     let style = warp::get()
         .and(warp::path("assets"))
         .and(warp::path::param())
         .and(warp::path::end())
-        .and_then(style);
+        .and_then(style)
+        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
 
     let search = warp::any()
         .and(db.clone())
@@ -141,7 +148,8 @@ pub async fn run(args: &args::Web) -> Result<()> {
         .and(warp::path::end())
         .and(warp::post())
         .and(warp::body::json())
-        .and_then(search);
+        .and_then(search)
+        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
 
     let get_sig = warp::get()
         .and(hbs.clone())
@@ -149,7 +157,8 @@ pub async fn run(args: &args::Web) -> Result<()> {
         .and(warp::path("-"))
         .and(warp::path::param())
         .and(warp::path::end())
-        .and_then(sig::get);
+        .and_then(sig::get)
+        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
 
     let get_issuer = warp::get()
         .and(hbs.clone())
@@ -157,14 +166,16 @@ pub async fn run(args: &args::Web) -> Result<()> {
         .and(warp::path("issuer"))
         .and(warp::path::param())
         .and(warp::path::end())
-        .and_then(issuer::get);
+        .and_then(issuer::get)
+        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
 
     let search_issuer = warp::get()
         .and(db.clone())
         .and(warp::path("issuer"))
         .and(warp::path::end())
         .and(warp::query::<issuer::IssuerSearch>())
-        .and_then(issuer::search);
+        .and_then(issuer::search)
+        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
 
     let get_pkg = warp::get()
         .and(hbs.clone())
@@ -173,7 +184,8 @@ pub async fn run(args: &args::Web) -> Result<()> {
         .and(warp::path::param())
         .and(warp::path::param())
         .and(warp::path::end())
-        .and_then(pkg::get);
+        .and_then(pkg::get)
+        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
 
     let search_pkg = warp::get()
         .and(hbs.clone())
@@ -181,7 +193,8 @@ pub async fn run(args: &args::Web) -> Result<()> {
         .and(warp::path("pkg"))
         .and(warp::path::end())
         .and(warp::query::<pkg::PkgSearch>())
-        .and_then(pkg::search);
+        .and_then(pkg::search)
+        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
 
     let routes = warp::any()
         .and(
