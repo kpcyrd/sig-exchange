@@ -1,4 +1,4 @@
-use crate::{archlinux, db, debian, errors::*, pgp};
+use crate::{archlinux, db, debian, errors::*, fetch, pgp};
 use crate::{args::Plumbing, srcinfo};
 use tokio::fs;
 
@@ -26,6 +26,15 @@ pub async fn run(cmd: Plumbing) -> Result<()> {
                 .with_context(|| format!("Failed to open file: {path:?}"))?;
             let parsed = debian::parse_source_tar(file).await?;
             println!("parsed={parsed:#?}");
+        }
+        Plumbing::FetchCache { url } => {
+            let db = db::Client::create().await?;
+            let client = fetch::Client::new(db)?;
+            let bytes = client
+                .fetch(&url)
+                .await
+                .with_context(|| format!("Failed to fetch URL: {url}"))?;
+            info!("Fetched {} bytes", bytes.len());
         }
         Plumbing::Migrate => {
             let _db = db::Client::create().await?;

@@ -37,6 +37,7 @@ pub enum Plumbing {
     ArchlinuxTar { path: PathBuf },
     DebSrc { path: PathBuf },
     DebianTar { path: PathBuf },
+    FetchCache { url: String },
     Migrate,
     PgpSigs { path: PathBuf },
     PingDb,

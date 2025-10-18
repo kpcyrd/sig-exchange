@@ -182,4 +182,56 @@ impl Client {
         .await?;
         Ok(pkgs)
     }
+
+    pub async fn get_cache_by_url(&self, url: &str) -> Result<Option<Vec<u8>>> {
+        let row = sqlx::query_as(
+            "SELECT content FROM cache
+                WHERE url = $1
+                ",
+        )
+        .bind(url)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some((content,)) = row {
+            Ok(Some(content))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn get_cache_by_filename(&self, filename: &str) -> Result<Option<Vec<u8>>> {
+        let row = sqlx::query_as(
+            "SELECT content FROM cache
+                WHERE filename = $1
+                ORDER BY url ASC
+                LIMIT 1",
+        )
+        .bind(filename)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some((content,)) = row {
+            Ok(Some(content))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn put_cache(&self, url: &str, filename: Option<&str>, content: &[u8]) -> Result<()> {
+        let _result = sqlx::query(
+            "INSERT INTO cache (url, filename, content)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (url) DO UPDATE SET
+            filename = EXCLUDED.filename,
+            content = EXCLUDED.content
+            ",
+        )
+        .bind(url)
+        .bind(filename)
+        .bind(content)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
 }

@@ -3,6 +3,7 @@ mod args;
 mod db;
 mod debian;
 mod errors;
+mod fetch;
 mod import;
 mod issuer;
 mod pgp;

@@ -1,3 +1,4 @@
+mod cache;
 mod issuer;
 mod pkg;
 mod sig;
@@ -53,9 +54,7 @@ fn cache_control(reply: impl warp::Reply, value: HeaderValue) -> impl warp::Repl
     warp::reply::with_header(reply, header::CACHE_CONTROL, value)
 }
 
-async fn index(
-    hbs: Arc<Handlebars>,
-) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
+async fn index(hbs: Arc<Handlebars>) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
     let html = hbs.render("index.html.hbs", &serde_json::json!({}))?;
     Ok(Box::new(warp::reply::html(html)))
 }
@@ -196,6 +195,14 @@ pub async fn run(args: &args::Web) -> Result<()> {
         .and_then(pkg::search)
         .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
 
+    let cache = warp::get()
+        .and(db.clone())
+        .and(warp::path("cache"))
+        .and(warp::path::param())
+        .and(warp::path::end())
+        .and_then(cache::get)
+        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
+
     let routes = warp::any()
         .and(
             index
@@ -205,7 +212,8 @@ pub async fn run(args: &args::Web) -> Result<()> {
                 .or(search_issuer)
                 .or(get_pkg)
                 .or(search_pkg)
-                .or(search),
+                .or(search)
+                .or(cache),
         )
         .recover(rejection)
         .with(log);
