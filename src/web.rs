@@ -11,6 +11,7 @@ use serde_json::json;
 use std::convert::Infallible;
 use std::result;
 use std::sync::Arc;
+use warp::reply::Reply;
 use warp::{Filter, http::StatusCode, reject::MethodNotAllowed, reply::Response};
 
 #[derive(RustEmbed)]
@@ -78,6 +79,16 @@ async fn search(
         "status": "ok",
         "req": search
     }))))
+}
+
+fn search_not_found() -> Box<dyn warp::Reply> {
+    let reply = warp::reply::with_header(
+        warp::reply::with_status("", StatusCode::FOUND),
+        "Location",
+        "/#not-found",
+    )
+    .into_response();
+    Box::new(reply)
 }
 
 async fn rejection(err: warp::Rejection) -> result::Result<impl warp::Reply, Infallible> {

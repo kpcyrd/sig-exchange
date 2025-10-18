@@ -13,6 +13,14 @@
 }
 
 header h1 a, header h1 a:visited {
-    text-decoration: none;
-    color: var(--text);
+  text-decoration: none;
+  color: var(--text);
+}
+
+#not-found {
+  display: none;
+}
+
+#not-found:target {
+  display: block;
 }

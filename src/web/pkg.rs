@@ -1,6 +1,7 @@
 use crate::db;
 use crate::errors::*;
 use crate::web::Handlebars;
+use crate::web::search_not_found;
 use serde::{Deserialize, Serialize};
 use std::result;
 use std::sync::Arc;
@@ -42,7 +43,7 @@ pub(super) async fn search(
     let pkgs = db.search_pkgs_by_name(&search.name).await?;
 
     let Some(first) = pkgs.first() else {
-        return Ok(Box::new(warp::redirect::found(Uri::from_static("/"))));
+        return Ok(search_not_found());
     };
 
     if pkgs.len() == 1 {

@@ -1,6 +1,7 @@
 use crate::db;
 use crate::errors::*;
 use crate::web::Handlebars;
+use crate::web::search_not_found;
 use serde::{Deserialize, Serialize};
 use std::result;
 use std::sync::Arc;
@@ -30,7 +31,7 @@ pub(super) async fn get(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super)  struct IssuerSearch {
+pub(super) struct IssuerSearch {
     pub fingerprint: String,
 }
 
@@ -40,12 +41,11 @@ pub(super) async fn search(
 ) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
     let fingerprint = search.fingerprint.to_ascii_lowercase();
 
-    let uri = if let Some(issuer) = db.get_issuer(&fingerprint).await? {
+    if let Some(issuer) = db.get_issuer(&fingerprint).await? {
         let uri = format!("/issuer/{}", issuer.fingerprint);
-        uri.parse::<Uri>().map_err(ApiError::from)?
+        let uri = uri.parse::<Uri>().map_err(ApiError::from)?;
+        Ok(Box::new(warp::redirect::found(uri)))
     } else {
-        Uri::from_static("/")
-    };
-
-    Ok(Box::new(warp::redirect::found(uri)))
+        Ok(search_not_found())
+    }
 }
