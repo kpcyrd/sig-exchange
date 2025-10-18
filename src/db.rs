@@ -189,21 +189,14 @@ impl Client {
         }
 
         let stream = sqlx::query_as::<_, UpstreamWithExtra>(
-            "SELECT u.*, COALESCE(c.pkg_count, 0) AS pkgs
-            FROM upstreams u
-            LEFT JOIN (
-            SELECT u2.issuer, COUNT(*) AS pkg_count
-            FROM upstreams u2
-            JOIN (
-                SELECT os, name, MAX(release_datetime) AS max_release
-                FROM pkgs
-                GROUP BY os, name
-            ) p ON p.os = u2.os AND p.name = u2.name AND u2.last_observed = p.max_release
-            GROUP BY u2.issuer
-            ) c ON c.issuer = u.issuer
-            WHERE u.os = $1
-            AND u.name = $2
-            AND u.last_observed = $3
+            "SELECT u.*, (
+                SELECT COUNT(*) FROM upstreams as u2
+                WHERE u2.issuer = u.issuer AND u2.last_observed = (
+                    SELECT MAX(release_datetime) FROM pkgs as p
+                    WHERE p.os = u2.os AND p.name = u2.name
+                )
+            ) as pkgs FROM upstreams as u
+            WHERE os = $1 AND name = $2 AND last_observed = $3
             ORDER BY u.issuer ASC",
         )
         .bind(os)
