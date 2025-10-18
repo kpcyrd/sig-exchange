@@ -9,7 +9,13 @@
 <h3>Upstream of</h3>
 <ul>
     {{#each upstreams}}
-    <li><a href="/pkg/{{ this.os }}/{{ this.name }}">{{ this.os }}/{{ this.name }}</a> - (last_observed={{ this.last_observed }})</li>
+    <li><a href="/pkg/{{ this.0.os }}/{{ this.0.name }}">{{ this.0.os }}/{{ this.0.name }}</a> -
+        {{#if (eq this.0.last_observed this.1)}}
+        ✅ current upstream
+        {{else}}
+        ⌛️ former upstream
+        {{/if}}
+    </li>
     {{/each}}
 </ul>
 {{/if}}

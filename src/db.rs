@@ -4,6 +4,7 @@ use crate::{
     pgp::PgpSig,
     pkg::{Pkg, Upstream},
 };
+use chrono::{DateTime, Utc};
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
 use std::env;
 use tokio_stream::StreamExt;
@@ -128,16 +129,47 @@ impl Client {
         Ok(())
     }
 
-    // TODO: include if this is still the latest release
-    pub async fn list_upstreams_for_issuer(&self, issuer: &str) -> Result<Vec<Upstream>> {
-        let upstreams = sqlx::query_as::<_, Upstream>(
-            "SELECT * FROM upstreams
+    pub async fn list_upstreams_for_issuer(
+        &self,
+        issuer: &str,
+    ) -> Result<Vec<(Upstream, DateTime<Utc>)>> {
+        #[derive(sqlx::FromRow)]
+        pub struct UpstreamWithExtra {
+            pub os: String,
+            pub name: String,
+            pub issuer: String,
+            pub last_observed: DateTime<Utc>,
+            pub latest_release: DateTime<Utc>,
+        }
+
+        let stream = sqlx::query_as::<_, UpstreamWithExtra>(
+            "SELECT u.*, (
+                SELECT MAX(release_datetime) FROM pkgs as p
+                WHERE p.os = u.os AND p.name = u.name
+            ) as latest_release FROM upstreams as u
             WHERE issuer = $1
             ORDER BY name ASC",
         )
         .bind(issuer)
-        .fetch_all(&self.pool)
-        .await?;
+        .fetch(&self.pool);
+
+        let upstreams = stream
+            .map(|row| {
+                row.map(|upstream| {
+                    (
+                        Upstream {
+                            os: upstream.os,
+                            name: upstream.name,
+                            issuer: upstream.issuer,
+                            last_observed: upstream.last_observed,
+                        },
+                        upstream.latest_release,
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .await?;
+
         Ok(upstreams)
     }
 
