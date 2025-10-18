@@ -178,17 +178,56 @@ impl Client {
         os: &str,
         name: &str,
         latest: DateTime<Utc>,
-    ) -> Result<Vec<Upstream>> {
-        let upstreams = sqlx::query_as::<_, Upstream>(
-            "SELECT * FROM upstreams
-            WHERE os = $1 AND name = $2 AND last_observed = $3
-            ORDER BY issuer ASC",
+    ) -> Result<Vec<(Upstream, u64)>> {
+        #[derive(sqlx::FromRow)]
+        pub struct UpstreamWithExtra {
+            pub os: String,
+            pub name: String,
+            pub issuer: String,
+            pub last_observed: DateTime<Utc>,
+            pub pkgs: i64,
+        }
+
+        let stream = sqlx::query_as::<_, UpstreamWithExtra>(
+            "SELECT u.*, COALESCE(c.pkg_count, 0) AS pkgs
+            FROM upstreams u
+            LEFT JOIN (
+            SELECT u2.issuer, COUNT(*) AS pkg_count
+            FROM upstreams u2
+            JOIN (
+                SELECT os, name, MAX(release_datetime) AS max_release
+                FROM pkgs
+                GROUP BY os, name
+            ) p ON p.os = u2.os AND p.name = u2.name AND u2.last_observed = p.max_release
+            GROUP BY u2.issuer
+            ) c ON c.issuer = u.issuer
+            WHERE u.os = $1
+            AND u.name = $2
+            AND u.last_observed = $3
+            ORDER BY u.issuer ASC",
         )
         .bind(os)
         .bind(name)
         .bind(latest)
-        .fetch_all(&self.pool)
-        .await?;
+        .fetch(&self.pool);
+
+        let upstreams = stream
+            .map(|row| {
+                row.map(|upstream| {
+                    (
+                        Upstream {
+                            os: upstream.os,
+                            name: upstream.name,
+                            issuer: upstream.issuer,
+                            last_observed: upstream.last_observed,
+                        },
+                        upstream.pkgs as u64,
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .await?;
+
         Ok(upstreams)
     }
 

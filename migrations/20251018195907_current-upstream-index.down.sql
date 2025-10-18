@@ -1,0 +1,2 @@
+DROP INDEX pkgs_idx_os_name_release_datetime_desc;
+DROP INDEX upstreams_idx_os_name_last_observed_issuer;

@@ -9,7 +9,7 @@ pkg: {{ os }}/{{ name }} - sig.exchange
 <h3>Upstreams</h3>
 <ul>
     {{#each upstreams}}
-    <li><a href="/issuer/{{ this.issuer }}">{{ this.issuer }}</a></li>
+    <li><a href="/issuer/{{ this.0.issuer }}">{{ this.0.issuer }}</a> ({{ this.1 }} pkgs)</li>
     {{/each}}
 </ul>
 {{/if}}
