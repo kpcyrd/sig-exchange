@@ -1,16 +1,23 @@
 use crate::db;
 use crate::errors::*;
+use bytes::Bytes;
+use std::pin::Pin;
+use tokio::io;
+use tokio_stream::{Stream, StreamExt};
 
 fn filename_from_url(url: &reqwest::Url) -> Result<String> {
     let segments = url
         .path_segments()
         .with_context(|| format!("Failed to extract path segments from URL: {:?}", url))?;
-    let filename = segments.filter(|s| !s.is_empty()).last().with_context(|| {
-        format!(
-            "Failed to extract filename from URL path segments: {:?}",
-            url
-        )
-    })?;
+    let filename = segments
+        .filter(|s| !s.is_empty())
+        .next_back()
+        .with_context(|| {
+            format!(
+                "Failed to extract filename from URL path segments: {:?}",
+                url
+            )
+        })?;
     Ok(filename.to_string())
 }
 
@@ -49,6 +56,16 @@ impl Client {
         let bytes = resp.bytes().await?.to_vec();
 
         Ok((filename, bytes.to_vec()))
+    }
+
+    pub async fn stream(
+        &self,
+        url: &str,
+    ) -> Result<Pin<Box<dyn Stream<Item = io::Result<Bytes>>>>> {
+        info!("Streaming URL: {:?}", url);
+        let resp = self.client.get(url).send().await?.error_for_status()?;
+        let stream = resp.bytes_stream().map(|b| b.map_err(io::Error::other));
+        Ok(Box::pin(stream))
     }
 }
 

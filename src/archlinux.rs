@@ -1,9 +1,147 @@
-use crate::{errors::*, srcinfo};
+use crate::{
+    db,
+    errors::*,
+    fetch,
+    issuer::Issuer,
+    pkg::{Pkg, Upstream},
+    srcinfo,
+};
+use alpm_types::OpenPGPIdentifier;
 use async_compression::tokio::bufread::BzDecoder;
 use chrono::{DateTime, Utc};
-use std::cmp;
+use std::{cmp, collections::VecDeque, path::Path};
 use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
 use tokio_stream::StreamExt;
+
+const REPOS: &[&str] = &["core-x86_64", "extra-x86_64", "multilib-x86_64"];
+
+fn matches_repo(path: &Path) -> bool {
+    let Ok(path) = path.strip_prefix("state-main") else {
+        return false;
+    };
+    REPOS.iter().any(|repo| path.starts_with(repo))
+}
+
+fn normalize_archlinux_gitlab_names(package: &str) -> String {
+    if package == "tree" {
+        return "unix-tree".to_string();
+    }
+
+    let mut iter = package.chars();
+    let mut out = String::new();
+    while let Some(ch) = iter.next() {
+        if ch != '+' {
+            out.push(ch);
+        } else if iter.clone().any(|c| c != '+') {
+            out.push('-');
+        } else {
+            out.push_str("plus");
+        }
+    }
+    out
+}
+
+pub async fn import_tree(db: db::Client) -> Result<()> {
+    let client = fetch::Client::new(db.clone())?;
+
+    let state_url =
+        "https://gitlab.archlinux.org/archlinux/packaging/state/-/archive/main/state-main.tar.bz2";
+    let stream = client.stream(state_url).await?;
+    let reader = tokio_util::io::StreamReader::new(stream);
+    let reader = BufReader::new(reader);
+    let reader = BzDecoder::new(reader);
+
+    let mut tar = tokio_tar::Archive::new(reader);
+    let mut entries = tar.entries()?;
+
+    let mut queue = VecDeque::new();
+    while let Some(entry) = entries.next().await {
+        let mut entry = entry?;
+
+        let header = entry.header();
+        if header.entry_type() != tokio_tar::EntryType::Regular {
+            continue;
+        }
+
+        let path = entry.path()?;
+        if !matches_repo(&path) {
+            debug!("Skipping package: {path:?}");
+            continue;
+        }
+        info!("Processing archlinux tree path: {path:?}");
+
+        let mut buf = String::new();
+        entry.read_to_string(&mut buf).await?;
+
+        let mut chunker = buf.split(' ');
+        let Some(pkgbase) = chunker.next() else {
+            continue;
+        };
+        let Some(version) = chunker.next() else {
+            continue;
+        };
+        let Some(tag) = chunker.next() else { continue };
+
+        queue.push_back((pkgbase.to_string(), version.to_string(), tag.to_string()));
+    }
+
+    for (pkgbase, _version, tag) in queue {
+        let repo = normalize_archlinux_gitlab_names(&pkgbase);
+        let url = format!(
+            "https://gitlab.archlinux.org/archlinux/packaging/packages/{repo}/-/archive/{tag}/{repo}-{tag}.tar.bz2"
+        );
+
+        let data = client.fetch(&url).await?;
+        info!("Fetched {} bytes", data.len());
+
+        if let Err(err) = import_pkg(&db, &data[..]).await {
+            error!("Failed to import package {pkgbase} from archlinux tree: {err:#}");
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn import_pkg<R: AsyncRead + Unpin>(db: &db::Client, reader: R) -> Result<()> {
+    let (pkg, release_datetime, _keys) = parse(reader).await?;
+
+    if let Some(pkg) = pkg {
+        if pkg.signing_keys.is_empty() {
+            return Ok(());
+        }
+
+        db.insert_pkg(&Pkg {
+            os: "archlinux".to_string(),
+            name: pkg.name.clone(),
+            version: pkg.version,
+            release_datetime,
+        })
+        .await?;
+
+        for key in pkg.signing_keys {
+            let OpenPGPIdentifier::OpenPGPv4Fingerprint(fp) = key else {
+                continue;
+            };
+            let issuer = fp.to_string().to_ascii_lowercase();
+
+            db.insert_issuer(&Issuer {
+                fingerprint: issuer.clone(),
+                family: "pgp".to_string(),
+            })
+            .await?;
+
+            db.insert_upstream(&Upstream {
+                os: "archlinux".to_string(),
+                name: pkg.name.clone(),
+                issuer,
+                last_observed: release_datetime,
+            })
+            .await?;
+        }
+    }
+
+    Ok(())
+}
 
 pub async fn parse<R: AsyncRead + Unpin>(
     reader: R,

@@ -3188,6 +3188,7 @@ dependencies = [
  "anyhow",
  "async-compression",
  "blake3",
+ "bytes",
  "chrono",
  "clap",
  "deb822-fast",
@@ -3206,6 +3207,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-tar",
+ "tokio-util",
  "warp",
 ]
 
