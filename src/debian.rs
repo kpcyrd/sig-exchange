@@ -188,7 +188,7 @@ pub async fn import_sources(db: db::Client) -> Result<()> {
             }
             Err(err) => {
                 error!(
-                    "Failed to parse Debian source tar for package {}: {:#}",
+                    "Failed to parse Debian source tar for package {:?}: {:#}",
                     pkg.name, err
                 );
                 continue;
@@ -196,7 +196,7 @@ pub async fn import_sources(db: db::Client) -> Result<()> {
         };
 
         let keys = pgp::parse_keys(&signing_keys)
-            .with_context(|| format!("Failed to parse PGP keys for package {}", pkg.name))?;
+            .with_context(|| format!("Failed to parse PGP keys for package {:?}", pkg.name))?;
 
         if keys.is_empty() {
             warn!(

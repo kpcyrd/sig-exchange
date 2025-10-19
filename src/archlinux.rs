@@ -3,6 +3,7 @@ use crate::{
     errors::*,
     fetch,
     issuer::Issuer,
+    pgp,
     pkg::{Pkg, Upstream},
     srcinfo,
 };
@@ -103,7 +104,7 @@ pub async fn import_tree(db: db::Client) -> Result<()> {
 }
 
 pub async fn import_pkg<R: AsyncRead + Unpin>(db: &db::Client, reader: R) -> Result<()> {
-    let (pkg, release_datetime, _keys) = parse(reader).await?;
+    let (pkg, release_datetime, signing_keys) = parse(reader).await?;
 
     if let Some(pkg) = pkg {
         if pkg.signing_keys.is_empty() {
@@ -138,6 +139,21 @@ pub async fn import_pkg<R: AsyncRead + Unpin>(db: &db::Client, reader: R) -> Res
                 last_observed: release_datetime,
             })
             .await?;
+        }
+
+        if let Some(signing_keys) = signing_keys {
+            let keys = pgp::parse_keys(&signing_keys)
+                .with_context(|| format!("Failed to parse PGP keys for package {:?}", pkg.name))?;
+
+            // We only add the bytes to the database, these files don't imply trust on their own
+            for key in keys {
+                db.insert_issuer(&Issuer {
+                    fingerprint: key.fingerprint,
+                    family: "pgp".to_string(),
+                    key: Some(key.bytes),
+                })
+                .await?;
+            }
         }
     }
 

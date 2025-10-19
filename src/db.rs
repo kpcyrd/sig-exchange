@@ -48,7 +48,7 @@ impl Client {
             "INSERT INTO issuers (fingerprint, family, key)
             VALUES ($1, $2, $3)
             ON CONFLICT (fingerprint) DO UPDATE SET
-            key = EXCLUDED.key
+            key = COALESCE(EXCLUDED.key, issuers.key)
             ",
         )
         .bind(&issuer.fingerprint)
