@@ -1,0 +1,1 @@
+ALTER TABLE issuers ADD COLUMN key BYTEA;

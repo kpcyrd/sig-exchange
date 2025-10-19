@@ -127,6 +127,7 @@ pub async fn import_pkg<R: AsyncRead + Unpin>(db: &db::Client, reader: R) -> Res
             db.insert_issuer(&Issuer {
                 fingerprint: issuer.clone(),
                 family: "pgp".to_string(),
+                key: None,
             })
             .await?;
 

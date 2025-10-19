@@ -2,21 +2,42 @@ use crate::db;
 use crate::errors::*;
 use crate::web::Handlebars;
 use crate::web::search_not_found;
+use sequoia_openpgp::{Packet, PacketPile, parse::Parse};
 use serde::{Deserialize, Serialize};
 use std::result;
 use std::sync::Arc;
 use warp::http::Uri;
+
+fn pgp_mpis(bytes: &[u8]) -> Option<String> {
+    let pile = PacketPile::from_reader(bytes).ok()?;
+
+    for packet in pile.descendants() {
+        let mpis = match packet {
+            Packet::PublicKey(key) => key.mpis(),
+            Packet::PublicSubkey(key) => key.mpis(),
+            _ => continue,
+        };
+        return Some(format!("{mpis:#?}"));
+    }
+
+    None
+}
 
 pub(super) async fn get(
     hbs: Arc<Handlebars>,
     db: db::Client,
     fingerprint: String,
 ) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
-    let Some(issuer) = db.get_issuer(&fingerprint).await? else {
+    let Some(mut issuer) = db.get_issuer(&fingerprint).await? else {
         return Err(warp::reject::not_found());
     };
     let upstreams = db.list_upstreams_for_issuer(&fingerprint).await?;
     let sigs = db.list_sigs_for_issuer(&fingerprint).await?;
+
+    let mpis = match (issuer.family.as_str(), issuer.key.take()) {
+        ("pgp", Some(key)) => pgp_mpis(&key),
+        _ => None,
+    };
 
     let html = hbs.render(
         "issuer.html.hbs",
@@ -24,6 +45,7 @@ pub(super) async fn get(
             "issuer": issuer,
             "upstreams": upstreams,
             "sigs": sigs,
+            "mpis": mpis,
         }),
     )?;
     Ok(Box::new(warp::reply::html(html)))

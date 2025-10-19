@@ -218,6 +218,7 @@ pub async fn import_sources(db: db::Client) -> Result<()> {
             db.insert_issuer(&Issuer {
                 fingerprint: key.fingerprint.clone(),
                 family: "pgp".to_string(),
+                key: Some(key.bytes),
             })
             .await?;
 

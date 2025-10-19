@@ -24,6 +24,7 @@ pub async fn run(cmd: &Import) -> Result<()> {
                 db.insert_issuer(&Issuer {
                     fingerprint: sig.issuer.clone(),
                     family: sig.family.clone(),
+                    key: None,
                 })
                 .await?;
                 db.insert_sig(&sig).await?;

@@ -45,13 +45,15 @@ impl Client {
     pub async fn insert_issuer(&self, issuer: &Issuer) -> Result<()> {
         info!("Inserting issuer: {issuer:?}");
         let _result = sqlx::query(
-            "INSERT INTO issuers (fingerprint, family)
-            VALUES ($1, $2)
-            ON CONFLICT (fingerprint) DO NOTHING
+            "INSERT INTO issuers (fingerprint, family, key)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (fingerprint) DO UPDATE SET
+            key = EXCLUDED.key
             ",
         )
         .bind(&issuer.fingerprint)
         .bind(&issuer.family)
+        .bind(&issuer.key)
         .execute(&self.pool)
         .await?;
         Ok(())

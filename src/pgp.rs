@@ -74,7 +74,7 @@ fn format_sig_algo(algo: &PublicKeyAlgorithm) -> String {
     format!("{:?}", algo)
 }
 
-fn encode(sig: Signature) -> Result<Vec<u8>> {
+fn encode_sig(sig: Signature) -> Result<Vec<u8>> {
     let p = Packet::from(sig);
     let mut buf = Vec::new();
     p.serialize(&mut buf)?;
@@ -153,7 +153,7 @@ pub fn parse_sigs(content: &str) -> Result<Vec<PgpSig>> {
                     continue;
                 };
 
-                let sig = encode(sig)?;
+                let sig = encode_sig(sig)?;
 
                 let sig = PgpSig {
                     chksum: sig::db_id(&sig),
@@ -179,7 +179,7 @@ pub fn parse_sigs(content: &str) -> Result<Vec<PgpSig>> {
 #[derive(Debug, Serialize, PartialEq)]
 pub struct PgpKey {
     pub fingerprint: String,
-    pub mpis: String,
+    pub bytes: Vec<u8>,
 }
 
 pub fn parse_keys(content: &str) -> Result<Vec<PgpKey>> {
@@ -203,15 +203,18 @@ pub fn parse_keys(content: &str) -> Result<Vec<PgpKey>> {
         };
 
         for packet in pile.descendants() {
-            let (fingerprint, mpis) = match packet {
-                Packet::PublicKey(key) => (key.fingerprint(), key.mpis()),
-                Packet::PublicSubkey(key) => (key.fingerprint(), key.mpis()),
+            let fingerprint = match packet {
+                Packet::PublicKey(key) => key.fingerprint(),
+                Packet::PublicSubkey(key) => key.fingerprint(),
                 _ => continue,
             };
 
+            let mut buf = Vec::new();
+            packet.serialize(&mut buf)?;
+
             keys.push(PgpKey {
                 fingerprint: format!("{fingerprint:x}"),
-                mpis: format!("{mpis:#?}"),
+                bytes: buf,
             });
         }
     }
@@ -532,27 +535,9 @@ D8HuQ5y6wuF2v9ikiJIA/1JRjc1j0jNr7+JihZln8qXiahqCBChUHxXWvm5CjWIy
         let content = String::from_utf8_lossy(content);
         let keys = parse_keys(&content).unwrap();
 
-        assert_eq!(
-            &keys[..3],
-            &[
-                PgpKey {
-                    fingerprint: "de29fb3971e71543fd2dc049508eaec5302da568".to_string(),
-                    mpis: "DSA {\n    p: 1024 bits: E687 911F A050 3C54 2FDC EFE0 651B 9978 F910 4871 8964 BD81 5970 B6D2 D9F3 E090 70E7 76BA E9E7 121E 6021 6F9E 7452 5469 106C 07E5 E068 FAD9 F19C C9A2 3D40 86CB 001C 867A A4A8 33E0 DB88 4CC8 C91F 9040 DA41 ABE6 E857 5256 6978 AE23 C778 B1D7 F967 24C7 DA74 F511 4595 3E20 6079 71D8 B5D9 E3A2 1EC8 A46E 444C 7DA6 881B 3BB3,\n    q: 160 bits: BDC2 6BCB 72F0 6BC1 5F81 5B42 5C57 88E4 4F30 026D,\n    g: 1024 bits: B3AD C61E 87C0 96D3 5860 0524 503D 456C 36A1 284B 9A8B D81A D767 C5C6 3EC0 75F5 DA80 A46A 729D DBA3 6BD3 D3BE A278 7FC6 2434 992A A5DE FE92 50F9 C27F 20BF A822 DEB8 EDB0 E2FB 290E 514C 6C13 F423 E5C5 52DD 7A3B 095D C6F9 B2E5 F1EF 8428 6CED 8499 AA45 4233 1E62 F8D4 EFC9 DE75 3FD6 842C 51BA 03FE F1DF 3FED A66C A705 EF30,\n    y: 1024 bits: BC97 6F6A 8F12 5234 3B08 30C7 F473 0F12 4D4B 4D28 DF52 9272 95A5 07A4 B476 FEC7 EDF0 ADE5 0448 F072 AE07 E571 39BB CB5B A583 CAD5 6B3C A7B1 2563 3024 6D99 921F 6E85 769A 1B20 3AED 3C69 9DDB 5CFA 5688 7489 E4D4 7DEE 3747 F2CD C8C6 E8B2 43CE 0F1C 7563 C8B0 0887 6F27 0242 2F6C F46D 82DE CCE7 CD5D 3E92 A49C 7BEA CF5B 16E8,\n}".to_string(),
-                },
-                PgpKey {
-                    fingerprint: "c41f1f5c64850100b21beb14a14e77b604e15f28".to_string(),
-                    mpis: "ElGamal {\n    p: 1024 bits: F6FD 5C2C 54B4 85E1 D762 E6C1 8364 D0F0 3D4D 6349 3353 20A3 6D2B C14B 1951 D2C7 3993 6E5C 251F 6088 C78F 0F79 D4AD 4AAA 95C6 0AFE 0E9F FD12 5576 A05D 9B3D C88F B2E0 49A4 CFAA 8F86 BF67 0331 DEC4 7FB2 927F 9139 A3F4 CCD2 AD3C F829 E424 1C1F 3F45 5F2C FDD1 766E 538F 1397 2DB4 6BDA A8D2 FDB5 7615 61D0 3E2D BA59 12DE 9007,\n    g: 3 bits: 05,\n    y: 1024 bits: D480 D63C ED3B 33DE 7768 A271 E825 415F CF09 66E6 03A4 9EFC 44D1 293C 7606 3360 FADC 2D7F 5911 3A52 A135 9EA5 B8DF 49ED 85D6 FA13 B1C3 2457 65A1 28C4 AB76 DCC5 ADDF 0F8E F3A8 F2D5 CB90 F2FB DAFC 9483 0EC1 0C59 DF2E F21A 2ED1 C042 ED01 A9F1 DA39 1847 E6E7 C564 B5EB 397B C719 A61F C7F9 126C 53A9 8CAF CA0A B620 2F31 77AF,\n}".to_string(),
-                },
-                PgpKey {
-                    fingerprint: "13155b0e9e634f42bf6c163fddba64ba2c312d2f".to_string(),
-                    mpis: "DSA {\n    p: 1024 bits: E41F 81FC 62A1 5A04 713B 9536 FE0E 4675 D822 D7AB B1E4 E350 C0FC 753E 28CD 82AC 6384 C4AE 2B0C EF73 55AE F38C C6E3 86C9 1830 AF40 5533 C2F9 FF8B AC39 383E D4C9 AD1A E1E8 3299 7FC9 6812 1802 86B5 2948 306F 941C B0B1 6880 C56A 8858 074D CB43 CE5E E64D C96F 973D CEAE FDB2 A09F AD69 7BD5 0044 A23E AAAC 48A2 E471 7CF2 6E39,\n    q: 160 bits: FFBA B4B3 262C 9D61 6251 338C 17BF E4BB A3C7 7611,\n    g: 1024 bits: 9569 9773 DAA9 6E41 1316 0AAD D0CB 29F4 341F B8CB 5D73 8006 E978 6C3C E6A6 3531 E569 A4AB 6CE1 87BE 6FE1 B190 4417 4209 301D DC40 28C1 5B24 D956 E151 8FE8 43F6 DFBF B94A DF63 CD4E B86D 03D0 1F69 DB9E 794E A10D 0707 D985 7453 B027 6981 E545 B898 C5CE 8048 665D 48D8 8F2F C098 2EE3 F729 0EDE 4968 D1A8 6FA2 11AD 53E6 71E4,\n    y: 1024 bits: D631 D249 D74A D478 B4A8 A942 869C 3855 0EDE D3EC 7EC4 B847 203E B111 92CC EDCC 173F 6E43 8566 0F9A 4651 6867 CA27 F0B5 110C 38ED 4241 E0CB 55F7 6593 0D8B B465 28E7 C455 5050 0306 B1A9 4CF1 BFC8 0628 186E E354 D97E 4B09 E9EE A3AB 87B0 E75C 012A 5D1D 2DF9 EC58 6771 AF36 C5BD 0AF8 D8A2 226B 9D55 5BCD 5FB8 4596 6DE3 C680,\n}".to_string(),
-                },
-            ]
-        );
-
         let keys = keys.into_iter().map(|k| k.fingerprint).collect::<Vec<_>>();
         assert_eq!(
-            keys,
+            &keys,
             &[
                 "de29fb3971e71543fd2dc049508eaec5302da568",
                 "c41f1f5c64850100b21beb14a14e77b604e15f28",

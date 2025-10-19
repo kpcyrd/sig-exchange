@@ -4,4 +4,5 @@ use serde::Serialize;
 pub struct Issuer {
     pub fingerprint: String,
     pub family: String,
+    pub key: Option<Vec<u8>>,
 }
