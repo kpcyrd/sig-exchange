@@ -43,11 +43,18 @@ pub async fn run(cmd: Plumbing) -> Result<()> {
             let _db = db::Client::create().await?;
             info!("All migrations have been applied");
         }
+        Plumbing::PgpKeys { path } => {
+            let buf = fs::read(&path)
+                .await
+                .with_context(|| format!("Failed to read file: {path:?}"))?;
+            let buf = String::from_utf8_lossy(&buf).into_owned();
+            pgp::parse_keys(&buf)?;
+        }
         Plumbing::PgpSigs { path } => {
             let buf = fs::read_to_string(&path)
                 .await
                 .with_context(|| format!("Failed to read file: {path:?}"))?;
-            pgp::parse(&buf)?;
+            pgp::parse_sigs(&buf)?;
         }
         Plumbing::PingDb => {
             let db = db::Client::create_no_migrations().await?;

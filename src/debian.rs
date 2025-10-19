@@ -1,5 +1,7 @@
+use crate::issuer::Issuer;
+use crate::pkg::{Pkg, Upstream};
 use crate::sig::RemoteSig;
-use crate::{db, errors::*, fetch};
+use crate::{db, errors::*, fetch, pgp};
 use chrono::{DateTime, Utc};
 use debian_changelog::ChangeLog;
 use std::{cmp, collections::BTreeMap};
@@ -7,7 +9,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
 use tokio_stream::StreamExt;
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct Pkg {
+pub struct DebPkg {
     pub name: String,
     pub version: String,
     pub debian_src_tar: String,
@@ -18,7 +20,7 @@ fn is_signature(filename: &str) -> Option<&str> {
     filename.strip_suffix(".asc")
 }
 
-pub async fn parse_source_index<R: AsyncRead + Unpin>(mut reader: R) -> Result<Vec<Pkg>> {
+pub async fn parse_source_index<R: AsyncRead + Unpin>(mut reader: R) -> Result<Vec<DebPkg>> {
     // this is needed because the parser we use can't do AsyncRead
     let mut buf = Vec::new();
     reader.read_to_end(&mut buf).await?;
@@ -83,7 +85,7 @@ pub async fn parse_source_index<R: AsyncRead + Unpin>(mut reader: R) -> Result<V
             continue;
         };
 
-        let mut pkg = Pkg {
+        let mut pkg = DebPkg {
             name: name.to_string(),
             version: version.to_string(),
             debian_src_tar: format!("https://deb.debian.org/debian/{directory}/{debian_src_tar}"),
@@ -178,8 +180,12 @@ pub async fn import_sources(db: db::Client) -> Result<()> {
 
         info!("Parsing Debian pkg source tar: {pkg:?}");
         let reader = fetch::Decompress::new(url, BufReader::new(&data[..]));
-        let foo = match parse_source_tar(reader).await {
-            Ok(x) => x,
+        let (release_datetime, signing_keys) = match parse_source_tar(reader).await {
+            Ok((dt, Some(k))) => (dt, k),
+            Ok((_, None)) => {
+                warn!("No signing keys found even though upstream signature file is present");
+                continue;
+            }
             Err(err) => {
                 error!(
                     "Failed to parse Debian source tar for package {}: {:#}",
@@ -189,7 +195,40 @@ pub async fn import_sources(db: db::Client) -> Result<()> {
             }
         };
 
-        debug!("Parsed Debian pkg source tar: {foo:?}");
+        let keys = pgp::parse_keys(&signing_keys)
+            .with_context(|| format!("Failed to parse PGP keys for package {}", pkg.name))?;
+
+        if keys.is_empty() {
+            warn!(
+                "No valid PGP keys found in signing key for package {:?}",
+                pkg.name
+            );
+            continue;
+        }
+
+        db.insert_pkg(&Pkg {
+            os: "debian".to_string(),
+            name: pkg.name.clone(),
+            version: pkg.version.clone(),
+            release_datetime,
+        })
+        .await?;
+
+        for key in keys {
+            db.insert_issuer(&Issuer {
+                fingerprint: key.fingerprint.clone(),
+                family: "pgp".to_string(),
+            })
+            .await?;
+
+            db.insert_upstream(&Upstream {
+                os: "debian".to_string(),
+                name: pkg.name.clone(),
+                issuer: key.fingerprint,
+                last_observed: release_datetime,
+            })
+            .await?;
+        }
     }
 
     Ok(())
@@ -234,7 +273,7 @@ Section: net
         let list = parse_source_index(data.as_bytes()).await.unwrap();
         assert_eq!(
             list,
-            vec![Pkg {
+            vec![DebPkg {
                 name: "2ping".to_string(),
                 version: "4.5-1.2".to_string(),
                 debian_src_tar:

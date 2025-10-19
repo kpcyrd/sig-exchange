@@ -18,7 +18,7 @@ pub async fn run(cmd: &Import) -> Result<()> {
             let buf = tokio::fs::read_to_string(&path)
                 .await
                 .with_context(|| format!("Failed to read file: {path:?}"))?;
-            for sig in pgp::parse(&buf)? {
+            for sig in pgp::parse_sigs(&buf)? {
                 debug!("Signature: {sig:?}");
                 info!("Inserting sig with chksum {}", sig.chksum);
                 db.insert_issuer(&Issuer {
