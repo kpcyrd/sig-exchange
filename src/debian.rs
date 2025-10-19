@@ -1,9 +1,7 @@
-use crate::errors::*;
 use crate::sig::RemoteSig;
-use async_compression::tokio::bufread::XzDecoder;
+use crate::{db, errors::*, fetch};
 use chrono::{DateTime, Utc};
 use debian_changelog::ChangeLog;
-use std::io::Read;
 use std::{cmp, collections::BTreeMap};
 use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
 use tokio_stream::StreamExt;
@@ -12,25 +10,21 @@ use tokio_stream::StreamExt;
 pub struct Pkg {
     pub name: String,
     pub version: String,
+    pub debian_src_tar: String,
     pub sigs: Vec<RemoteSig>,
-}
-
-pub async fn parse_source_index<R: AsyncRead + Unpin>(reader: R) -> Result<Vec<Pkg>> {
-    let reader = BufReader::new(reader);
-    let mut reader = XzDecoder::new(reader);
-
-    let mut buf = Vec::new();
-    reader.read_to_end(&mut buf).await?;
-
-    parse_decompressed_reader_source_index(&buf[..])
 }
 
 fn is_signature(filename: &str) -> Option<&str> {
     filename.strip_suffix(".asc")
 }
 
-pub fn parse_decompressed_reader_source_index<R: Read>(reader: R) -> Result<Vec<Pkg>> {
-    let deb822 = deb822_fast::Deb822::from_reader(reader)
+pub async fn parse_source_index<R: AsyncRead + Unpin>(mut reader: R) -> Result<Vec<Pkg>> {
+    // this is needed because the parser we use can't do AsyncRead
+    let mut buf = Vec::new();
+    reader.read_to_end(&mut buf).await?;
+
+    // now process the buffered data
+    let deb822 = deb822_fast::Deb822::from_reader(&buf[..])
         .map_err(|err| anyhow!("Failed to parse deb822: {err:#}"))?;
 
     let mut pkgs = Vec::new();
@@ -70,16 +64,31 @@ pub fn parse_decompressed_reader_source_index<R: Read>(reader: R) -> Result<Vec<
             map.insert(filename.to_string(), sha256.to_string());
         }
 
-        let mut pkg = Pkg {
-            name: name.to_string(),
-            version: version.to_string(),
-            sigs: Vec::new(),
-        };
-
         // check if there's any signatures
         if map.keys().any(|f| is_signature(f).is_some()) {
             info!("Found package with signatures: name={name:?} version={version:?}");
+        } else {
+            continue;
         }
+
+        let Some(debian_src_tar) = map.keys().find(|f| {
+            let mut chunks = f.split('.');
+            chunks.next_back().is_some()
+                && chunks.next_back() == Some("tar")
+                && chunks.next_back() == Some("debian")
+        }) else {
+            warn!(
+                "Could not determine debian source tar for package: name={name:?} version={version:?}"
+            );
+            continue;
+        };
+
+        let mut pkg = Pkg {
+            name: name.to_string(),
+            version: version.to_string(),
+            debian_src_tar: format!("https://deb.debian.org/debian/{directory}/{debian_src_tar}"),
+            sigs: Vec::new(),
+        };
 
         for sig_filename in map.keys() {
             let Some(filename) = is_signature(sig_filename) else {
@@ -108,26 +117,23 @@ pub fn parse_decompressed_reader_source_index<R: Read>(reader: R) -> Result<Vec<
 pub async fn parse_source_tar<R: AsyncRead + Unpin>(
     reader: R,
 ) -> Result<(DateTime<Utc>, Option<String>)> {
-    let reader = BufReader::new(reader);
-    let reader = XzDecoder::new(reader);
-
     let mut tar = tokio_tar::Archive::new(reader);
     let mut entries = tar.entries()?;
 
     let mut release_time = None;
-    let mut signing_keys = String::new();
+    let mut signing_keys = Vec::new();
     while let Some(entry) = entries.next().await {
         let mut entry = entry?;
         let path = entry.path()?;
 
+        debug!("Found file in debian tar: {path:?}");
         match path.to_str() {
             Some("debian/changelog") => {
-                info!("Found file in debian tar: {path:?}");
-
                 let mut buf = Vec::new();
                 entry.read_to_end(&mut buf).await?;
 
-                let changelog = ChangeLog::read(&buf[..])?;
+                let changelog =
+                    ChangeLog::read(&buf[..]).context("Failed to parse debian changelog")?;
                 for entry in changelog.iter() {
                     let Some(datetime) = entry.datetime() else {
                         continue;
@@ -137,32 +143,64 @@ pub async fn parse_source_tar<R: AsyncRead + Unpin>(
                 }
             }
             Some("debian/upstream/signing-key.asc") => {
-                info!("Found file in debian tar: {path:?}");
-                entry.read_to_string(&mut signing_keys).await?;
-                if !signing_keys.ends_with('\n') {
-                    signing_keys.push('\n');
+                entry.read_to_end(&mut signing_keys).await?;
+                if !signing_keys.ends_with(b"\n") {
+                    signing_keys.push(b'\n');
                 }
             }
-            _ => {
-                debug!("Found file in debian tar: {path:?}");
-            }
+            _ => {}
         }
     }
 
     let release_time = release_time.context("Failed to determine release datetime")?;
 
+    let signing_keys = String::from_utf8_lossy(&signing_keys);
     let signing_keys = Some(signing_keys);
     let signing_keys = signing_keys.filter(|s| !s.is_empty());
+    let signing_keys = signing_keys.map(|s| s.into_owned());
 
     Ok((release_time, signing_keys))
+}
+
+pub async fn import_sources(db: db::Client) -> Result<()> {
+    let client = fetch::Client::new(db.clone())?;
+
+    let url = "https://deb.debian.org/debian/dists/unstable/main/source/Sources.xz";
+    let stream = client.stream(url).await?;
+    let reader = tokio_util::io::StreamReader::new(stream);
+    let reader = fetch::Decompress::new(url, BufReader::new(reader));
+    let pkgs = parse_source_index(reader).await?;
+
+    for pkg in pkgs {
+        let url = &pkg.debian_src_tar;
+        let data = client.fetch(url).await?;
+        debug!("Fetched {} bytes", data.len());
+
+        info!("Parsing Debian pkg source tar: {pkg:?}");
+        let reader = fetch::Decompress::new(url, BufReader::new(&data[..]));
+        let foo = match parse_source_tar(reader).await {
+            Ok(x) => x,
+            Err(err) => {
+                error!(
+                    "Failed to parse Debian source tar for package {}: {:#}",
+                    pkg.name, err
+                );
+                continue;
+            }
+        };
+
+        debug!("Parsed Debian pkg source tar: {foo:?}");
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_parse_debsrc() {
+    #[tokio::test]
+    async fn test_parse_debsrc() {
         let data = r#"Package: 2ping
 Binary: 2ping
 Version: 4.5-1.2
@@ -193,12 +231,15 @@ Priority: source
 Section: net
 
 "#;
-        let list = parse_decompressed_reader_source_index(data.as_bytes()).unwrap();
+        let list = parse_source_index(data.as_bytes()).await.unwrap();
         assert_eq!(
             list,
             vec![Pkg {
                 name: "2ping".to_string(),
                 version: "4.5-1.2".to_string(),
+                debian_src_tar:
+                    "https://deb.debian.org/debian/pool/main/2/2ping/2ping_4.5-1.2.debian.tar.xz"
+                        .to_string(),
                 sigs: vec![RemoteSig {
                     location:
                         "https://deb.debian.org/debian/pool/main/2/2ping/2ping_4.5.orig.tar.gz.asc"
@@ -218,7 +259,9 @@ Section: net
     #[tokio::test]
     async fn test_parse_debian_tar() {
         let data = include_bytes!("../test_data/2ping_4.5-1.2.debian.tar.xz");
-        let (release_time, signing_key) = parse_source_tar(&data[..]).await.unwrap();
+        let reader =
+            fetch::Decompress::new("2ping_4.5-1.2.debian.tar.xz", BufReader::new(&data[..]));
+        let (release_time, signing_key) = parse_source_tar(reader).await.unwrap();
         assert_eq!(
             release_time,
             DateTime::parse_from_rfc3339("2023-11-27T11:51:56Z")

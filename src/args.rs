@@ -30,6 +30,7 @@ pub struct Web {
 pub enum Import {
     ArchlinuxTar { path: PathBuf },
     ArchlinuxTree,
+    DebianSources,
     PgpSigs { path: PathBuf },
 }
 

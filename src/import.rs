@@ -1,4 +1,4 @@
-use crate::{archlinux, args::Import, db, errors::*, issuer::Issuer, pgp};
+use crate::{archlinux, args::Import, db, debian, errors::*, issuer::Issuer, pgp};
 use tokio::fs;
 
 pub async fn run(cmd: &Import) -> Result<()> {
@@ -13,6 +13,7 @@ pub async fn run(cmd: &Import) -> Result<()> {
             archlinux::import_pkg(&db, file).await?;
         }
         Import::ArchlinuxTree => archlinux::import_tree(db).await?,
+        Import::DebianSources => debian::import_sources(db).await?,
         Import::PgpSigs { path } => {
             let buf = tokio::fs::read_to_string(&path)
                 .await

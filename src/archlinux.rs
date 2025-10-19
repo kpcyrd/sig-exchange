@@ -92,7 +92,7 @@ pub async fn import_tree(db: db::Client) -> Result<()> {
         );
 
         let data = client.fetch(&url).await?;
-        info!("Fetched {} bytes", data.len());
+        debug!("Fetched {} bytes", data.len());
 
         if let Err(err) = import_pkg(&db, &data[..]).await {
             error!("Failed to import package {pkgbase} from archlinux tree: {err:#}");
@@ -169,7 +169,7 @@ pub async fn parse<R: AsyncRead + Unpin>(
         debug!("Found file in archlinux tar: {path:?}");
 
         if path.ends_with("/.SRCINFO") {
-            info!("Parsing .SRCINFO file from archlinux tar");
+            debug!("Parsing .SRCINFO file from archlinux tar");
 
             let mut buf = String::new();
             entry.read_to_string(&mut buf).await?;

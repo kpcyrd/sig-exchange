@@ -1,10 +1,11 @@
 use crate::db;
 use crate::errors::*;
+use async_compression::tokio::bufread::{BzDecoder, GzipDecoder, XzDecoder};
 use bytes::Bytes;
 use std::env;
 use std::pin::Pin;
 use std::time::Duration;
-use tokio::io;
+use tokio::io::{self, AsyncBufRead, AsyncRead};
 use tokio_stream::{Stream, StreamExt};
 
 fn filename_from_url(url: &reqwest::Url) -> Result<String> {
@@ -21,6 +22,42 @@ fn filename_from_url(url: &reqwest::Url) -> Result<String> {
             )
         })?;
     Ok(filename.to_string())
+}
+
+pub enum Decompress<R> {
+    Bz2(BzDecoder<R>),
+    Xz(XzDecoder<R>),
+    Gz(GzipDecoder<R>),
+    Plain(R),
+}
+
+impl<R> Decompress<R> {
+    pub fn new(url: &str, reader: R) -> Self
+    where
+        R: AsyncBufRead + Unpin,
+    {
+        match url.split('.').next_back() {
+            Some("bz2" | "bzip2") => Decompress::Bz2(BzDecoder::new(reader)),
+            Some("xz") => Decompress::Xz(XzDecoder::new(reader)),
+            Some("gz") => Decompress::Gz(GzipDecoder::new(reader)),
+            _ => Decompress::Plain(reader),
+        }
+    }
+}
+
+impl<R: AsyncBufRead + Unpin> AsyncRead for Decompress<R> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        match self.get_mut() {
+            Decompress::Bz2(decoder) => Pin::new(decoder).poll_read(cx, buf),
+            Decompress::Xz(decoder) => Pin::new(decoder).poll_read(cx, buf),
+            Decompress::Gz(decoder) => Pin::new(decoder).poll_read(cx, buf),
+            Decompress::Plain(reader) => Pin::new(reader).poll_read(cx, buf),
+        }
+    }
 }
 
 pub struct Client {

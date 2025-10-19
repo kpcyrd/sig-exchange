@@ -1,6 +1,7 @@
 use crate::{archlinux, db, debian, errors::*, fetch, pgp};
 use crate::{args::Plumbing, srcinfo};
 use tokio::fs;
+use tokio::io::BufReader;
 
 pub async fn run(cmd: Plumbing) -> Result<()> {
     match cmd {
@@ -15,7 +16,9 @@ pub async fn run(cmd: Plumbing) -> Result<()> {
             let file = fs::File::open(&path)
                 .await
                 .with_context(|| format!("Failed to open file: {path:?}"))?;
-            let list = debian::parse_source_index(file).await?;
+
+            let reader = fetch::Decompress::new(&path.to_string_lossy(), BufReader::new(file));
+            let list = debian::parse_source_index(reader).await?;
             for pkg in list {
                 println!("pkg={pkg:#?}");
             }
