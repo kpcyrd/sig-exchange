@@ -4,7 +4,7 @@ use crate::{
     fetch,
     issuer::Issuer,
     pgp,
-    pkg::{Pkg, Upstream},
+    pkg::{Artifact, Pkg, Upstream},
     srcinfo,
 };
 use alpm_types::OpenPGPIdentifier;
@@ -14,6 +14,7 @@ use std::{cmp, collections::VecDeque, path::Path};
 use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
 use tokio_stream::StreamExt;
 
+const OS: &str = "archlinux";
 const REPOS: &[&str] = &["core-x86_64", "extra-x86_64", "multilib-x86_64"];
 
 fn matches_repo(path: &Path) -> bool {
@@ -112,9 +113,9 @@ pub async fn import_pkg<R: AsyncRead + Unpin>(db: &db::Client, reader: R) -> Res
         }
 
         db.insert_pkg(&Pkg {
-            os: "archlinux".to_string(),
+            os: OS.to_string(),
             name: pkg.name.clone(),
-            version: pkg.version,
+            version: pkg.version.clone(),
             release_datetime,
         })
         .await?;
@@ -133,7 +134,7 @@ pub async fn import_pkg<R: AsyncRead + Unpin>(db: &db::Client, reader: R) -> Res
             .await?;
 
             db.insert_upstream(&Upstream {
-                os: "archlinux".to_string(),
+                os: OS.to_string(),
                 name: pkg.name.clone(),
                 issuer,
                 last_observed: release_datetime,
@@ -153,6 +154,19 @@ pub async fn import_pkg<R: AsyncRead + Unpin>(db: &db::Client, reader: R) -> Res
                     key: Some(key.bytes),
                 })
                 .await?;
+            }
+
+            for sig in pkg.sigs {
+                for (algo, hash) in sig.artifact_hashes {
+                    db.insert_artifact(&Artifact {
+                        chksum: format!("{algo}:{hash}"),
+                        url: sig.artifact_url.clone(),
+                        os: OS.to_string(),
+                        pkg: pkg.name.clone(),
+                        version: pkg.version.clone(),
+                    })
+                    .await?;
+                }
             }
         }
     }
@@ -228,8 +242,9 @@ mod tests {
             version: "0.25.0-1".to_string(),
             signing_keys: vec!["64B13F7117D6E07D661BBCE0FE763A64F5E54FD6".parse().unwrap()],
             sigs: vec![RemoteSig {
-                location: "https://github.com/kpcyrd/rebuilderd/releases/download/v0.25.0/rebuilderd-0.25.0.tar.gz.asc".to_string(),
-                for_hash: [
+                sig_url: "https://github.com/kpcyrd/rebuilderd/releases/download/v0.25.0/rebuilderd-0.25.0.tar.gz.asc".to_string(),
+                artifact_url: "https://github.com/kpcyrd/rebuilderd/archive/refs/tags/v0.25.0.tar.gz".to_string(),
+                artifact_hashes: [
                     ("blake2b", "d8700167849f09eb2667e198f5c91f4a910566f3b1a7100a4f835181b9aff17892d9c976665e5dc60c6bec74ac9262d673c9add3cbe62470f90cc5fd4912d2dc".to_string()),
                     ("sha512", "b1cb36f3d9b416aac208a32e0c76041f04b975c9ea04c4f49f4c8a46856ecd960577e05a40d1278fa2feb326623af816a1dae1e8ad64d72745643f99101ac286".to_string()),
                 ].into_iter().collect(),

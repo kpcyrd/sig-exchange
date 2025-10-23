@@ -2,7 +2,7 @@ use crate::{
     errors::{ApiResult as Result, *},
     issuer::Issuer,
     pgp::PgpSig,
-    pkg::{Pkg, Upstream},
+    pkg::{Artifact, Pkg, Upstream},
 };
 use chrono::{DateTime, Utc};
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
@@ -43,7 +43,7 @@ impl Client {
     }
 
     pub async fn insert_issuer(&self, issuer: &Issuer) -> Result<()> {
-        info!("Inserting issuer: {issuer:?}");
+        debug!("Inserting issuer: {issuer:?}");
         let _result = sqlx::query(
             "INSERT INTO issuers (fingerprint, family, key)
             VALUES ($1, $2, $3)
@@ -325,6 +325,24 @@ impl Client {
         .bind(url)
         .bind(filename)
         .bind(content)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn insert_artifact(&self, artifact: &Artifact) -> Result<()> {
+        info!("Inserting artifact: {artifact:?}");
+        let _result = sqlx::query(
+            "INSERT INTO artifacts (chksum, url, os, pkg, version)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (chksum, url, os, pkg, version) DO NOTHING
+            ",
+        )
+        .bind(&artifact.chksum)
+        .bind(&artifact.url)
+        .bind(&artifact.os)
+        .bind(&artifact.pkg)
+        .bind(&artifact.version)
         .execute(&self.pool)
         .await?;
         Ok(())

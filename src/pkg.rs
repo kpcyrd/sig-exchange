@@ -16,3 +16,12 @@ pub struct Pkg {
     pub version: String,
     pub release_datetime: DateTime<Utc>,
 }
+
+#[derive(sqlx::FromRow, Debug, Serialize, PartialEq)]
+pub struct Artifact {
+    pub chksum: String,
+    pub url: String,
+    pub os: String,
+    pub pkg: String,
+    pub version: String,
+}

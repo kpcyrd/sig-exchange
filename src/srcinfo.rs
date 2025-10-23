@@ -92,13 +92,13 @@ pub fn parse(srcinfo: &str) -> Result<Pkg> {
         map.insert(filename, (idx, src));
     }
 
-    for (sig_filename, (_, src)) in &map {
+    for (sig_filename, (_, sig_src)) in &map {
         let Some(filename) = is_signature(sig_filename) else {
             continue;
         };
 
         info!("Looking up hash data for {sig_filename:?} -> {filename:?}");
-        let Some(&(idx, _)) = map.get(filename) else {
+        let Some(&(idx, ref artifact_src)) = map.get(filename) else {
             continue;
         };
 
@@ -110,10 +110,13 @@ pub fn parse(srcinfo: &str) -> Result<Pkg> {
         checksum(&mut hashes, "sha512", pkgbase.sha512_checksums.get(idx));
 
         pkg.sigs.push(RemoteSig {
-            location: location(src)
+            sig_url: location(sig_src)
                 .with_context(|| anyhow!("Failed to get location for source #{idx}"))?
                 .to_string(),
-            for_hash: hashes,
+            artifact_url: location(artifact_src)
+                .with_context(|| anyhow!("Failed to get location for source #{idx}"))?
+                .to_string(),
+            artifact_hashes: hashes,
         });
     }
 
@@ -135,8 +138,9 @@ mod tests {
                 version: "0.25.0-1".to_string(),
                 signing_keys: vec!["64B13F7117D6E07D661BBCE0FE763A64F5E54FD6".parse().unwrap()],
                 sigs: vec![RemoteSig {
-                    location: "https://github.com/kpcyrd/rebuilderd/releases/download/v0.25.0/rebuilderd-0.25.0.tar.gz.asc".to_string(),
-                    for_hash: [
+                    sig_url: "https://github.com/kpcyrd/rebuilderd/releases/download/v0.25.0/rebuilderd-0.25.0.tar.gz.asc".to_string(),
+                    artifact_url: "https://github.com/kpcyrd/rebuilderd/archive/refs/tags/v0.25.0.tar.gz".to_string(),
+                    artifact_hashes: [
                         ("blake2b", "d8700167849f09eb2667e198f5c91f4a910566f3b1a7100a4f835181b9aff17892d9c976665e5dc60c6bec74ac9262d673c9add3cbe62470f90cc5fd4912d2dc".to_string()),
                         ("sha512", "b1cb36f3d9b416aac208a32e0c76041f04b975c9ea04c4f49f4c8a46856ecd960577e05a40d1278fa2feb326623af816a1dae1e8ad64d72745643f99101ac286".to_string()),
                     ]

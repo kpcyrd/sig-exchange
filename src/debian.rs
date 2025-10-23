@@ -1,5 +1,5 @@
 use crate::issuer::Issuer;
-use crate::pkg::{Pkg, Upstream};
+use crate::pkg::{Artifact, Pkg, Upstream};
 use crate::sig::RemoteSig;
 use crate::{db, errors::*, fetch, pgp};
 use chrono::{DateTime, Utc};
@@ -7,6 +7,8 @@ use debian_changelog::ChangeLog;
 use std::{cmp, collections::BTreeMap};
 use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
 use tokio_stream::StreamExt;
+
+const OS: &str = "debian";
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct DebPkg {
@@ -103,8 +105,9 @@ pub async fn parse_source_index<R: AsyncRead + Unpin>(mut reader: R) -> Result<V
             };
 
             pkg.sigs.push(RemoteSig {
-                location: format!("https://deb.debian.org/debian/{directory}/{sig_filename}"),
-                for_hash: [("sha256", sha256.to_string())].into_iter().collect(),
+                sig_url: format!("https://deb.debian.org/debian/{directory}/{sig_filename}"),
+                artifact_url: format!("https://deb.debian.org/debian/{directory}/{filename}"),
+                artifact_hashes: [("sha256", sha256.to_string())].into_iter().collect(),
             });
         }
 
@@ -207,7 +210,7 @@ pub async fn import_sources(db: db::Client) -> Result<()> {
         }
 
         db.insert_pkg(&Pkg {
-            os: "debian".to_string(),
+            os: OS.to_string(),
             name: pkg.name.clone(),
             version: pkg.version.clone(),
             release_datetime,
@@ -223,12 +226,25 @@ pub async fn import_sources(db: db::Client) -> Result<()> {
             .await?;
 
             db.insert_upstream(&Upstream {
-                os: "debian".to_string(),
+                os: OS.to_string(),
                 name: pkg.name.clone(),
                 issuer: key.fingerprint,
                 last_observed: release_datetime,
             })
             .await?;
+        }
+
+        for sig in pkg.sigs {
+            for (algo, hash) in sig.artifact_hashes {
+                db.insert_artifact(&Artifact {
+                    chksum: format!("{algo}:{hash}"),
+                    url: sig.artifact_url.clone(),
+                    os: OS.to_string(),
+                    pkg: pkg.name.clone(),
+                    version: pkg.version.clone(),
+                })
+                .await?;
+            }
         }
     }
 
@@ -281,10 +297,13 @@ Section: net
                     "https://deb.debian.org/debian/pool/main/2/2ping/2ping_4.5-1.2.debian.tar.xz"
                         .to_string(),
                 sigs: vec![RemoteSig {
-                    location:
+                    sig_url:
                         "https://deb.debian.org/debian/pool/main/2/2ping/2ping_4.5.orig.tar.gz.asc"
                             .to_string(),
-                    for_hash: [(
+                    artifact_url:
+                        "https://deb.debian.org/debian/pool/main/2/2ping/2ping_4.5.orig.tar.gz"
+                            .to_string(),
+                    artifact_hashes: [(
                         "sha256",
                         "867009928bf767d36279f90ff8f891855804c0004849f9554ac77fcd7f0fdb7b"
                             .to_string()
