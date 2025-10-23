@@ -1,3 +1,4 @@
+mod artifact;
 mod cache;
 mod issuer;
 mod pkg;
@@ -204,6 +205,23 @@ pub async fn run(args: &args::Web) -> Result<()> {
         .and_then(pkg::search)
         .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
 
+    let get_artifact = warp::get()
+        .and(hbs.clone())
+        .and(db.clone())
+        .and(warp::path("artifact"))
+        .and(warp::path::param())
+        .and(warp::path::end())
+        .and_then(artifact::get)
+        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
+
+    let search_artifact = warp::get()
+        .and(db.clone())
+        .and(warp::path("artifact"))
+        .and(warp::path::end())
+        .and(warp::query::<artifact::ArtifactSearch>())
+        .and_then(artifact::search)
+        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
+
     let cache = warp::get()
         .and(db.clone())
         .and(warp::path("cache"))
@@ -222,6 +240,8 @@ pub async fn run(args: &args::Web) -> Result<()> {
                 .or(get_pkg)
                 .or(list_os_pkgs)
                 .or(search_pkg)
+                .or(get_artifact)
+                .or(search_artifact)
                 .or(search)
                 .or(cache),
         )

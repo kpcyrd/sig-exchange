@@ -347,4 +347,15 @@ impl Client {
         .await?;
         Ok(())
     }
+
+    pub async fn count_by_artifact_chksum(&self, chksum: &str) -> Result<u64> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM artifacts
+            WHERE chksum = $1",
+        )
+        .bind(chksum)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.0 as u64)
+    }
 }
