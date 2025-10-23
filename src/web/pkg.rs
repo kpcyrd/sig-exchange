@@ -1,13 +1,47 @@
 use crate::db;
 use crate::errors::*;
-use crate::web::Handlebars;
-use crate::web::search_not_found;
+use crate::web::{CACHE_CONTROL_DEFAULT, Handlebars, cache_control, search_not_found};
 use serde::{Deserialize, Serialize};
 use std::result;
 use std::sync::Arc;
-use warp::http::Uri;
+use warp::{Filter, http::Uri};
 
-pub(super) async fn get(
+pub(super) fn endpoints(
+    hbs: Arc<Handlebars>,
+    db: db::Client,
+) -> impl warp::Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    let hbs = warp::any().map(move || hbs.clone());
+    let db = warp::any().map(move || db.clone());
+
+    let get = warp::get()
+        .and(hbs.clone())
+        .and(db.clone())
+        .and(warp::path::param())
+        .and(warp::path::param())
+        .and(warp::path::end())
+        .and_then(get)
+        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
+
+    let list_for_os = warp::get()
+        .and(hbs.clone())
+        .and(db.clone())
+        .and(warp::path::param())
+        .and(warp::path::end())
+        .and_then(list_for_os)
+        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
+
+    let search = warp::get()
+        .and(hbs.clone())
+        .and(db.clone())
+        .and(warp::path::end())
+        .and(warp::query::<PkgSearch>())
+        .and_then(search)
+        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
+
+    get.or(list_for_os).or(search)
+}
+
+async fn get(
     hbs: Arc<Handlebars>,
     db: db::Client,
     os: String,
@@ -33,7 +67,7 @@ pub(super) async fn get(
     Ok(Box::new(warp::reply::html(html)))
 }
 
-pub(super) async fn list_for_os(
+async fn list_for_os(
     hbs: Arc<Handlebars>,
     db: db::Client,
     os: String,
@@ -54,11 +88,11 @@ pub(super) async fn list_for_os(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) struct PkgSearch {
+struct PkgSearch {
     pub name: String,
 }
 
-pub(super) async fn search(
+async fn search(
     hbs: Arc<Handlebars>,
     db: db::Client,
     search: PkgSearch,

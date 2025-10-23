@@ -1,15 +1,15 @@
 mod artifact;
 mod cache;
+mod index;
 mod issuer;
 mod pkg;
+mod search;
 mod sig;
 
 use crate::args;
 use crate::db;
 use crate::errors::*;
 use rust_embed::RustEmbed;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::convert::Infallible;
 use std::result;
 use std::sync::Arc;
@@ -18,7 +18,6 @@ use warp::{
     Filter,
     http::{HeaderValue, StatusCode, header},
     reject::MethodNotAllowed,
-    reply::Response,
 };
 
 const CACHE_CONTROL_DEFAULT: HeaderValue =
@@ -53,38 +52,6 @@ impl Handlebars {
 
 fn cache_control(reply: impl warp::Reply, value: HeaderValue) -> impl warp::Reply {
     warp::reply::with_header(reply, header::CACHE_CONTROL, value)
-}
-
-async fn index(hbs: Arc<Handlebars>) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
-    let html = hbs.render("index.html.hbs", &serde_json::json!({}))?;
-    Ok(Box::new(warp::reply::html(html)))
-}
-
-async fn style(filename: String) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
-    if filename.ends_with(".css")
-        && let Some(style) = Assets::get(&filename)
-    {
-        // TODO: avoid allocation if possible
-        let response = Response::new(style.data.to_vec().into());
-        Ok(Box::new(response))
-    } else {
-        Err(warp::reject::not_found())
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Search {
-    pub query: String,
-}
-
-async fn search(
-    _db: db::Client,
-    search: Search,
-) -> result::Result<Box<dyn warp::Reply>, warp::Rejection> {
-    Ok(Box::new(warp::reply::json(&json!({
-        "status": "ok",
-        "req": search
-    }))))
 }
 
 fn search_not_found() -> Box<dyn warp::Reply> {
@@ -122,126 +89,25 @@ async fn rejection(err: warp::Rejection) -> result::Result<impl warp::Reply, Inf
 
 pub async fn run(args: &args::Web) -> Result<()> {
     let hbs = Arc::new(Handlebars::new()?);
-    let hbs = warp::any().map(move || hbs.clone());
-
     let db = db::Client::create().await?;
-    let db = warp::any().map(move || db.clone());
 
     let log = warp::log("web");
 
-    let index = warp::get()
-        .and(hbs.clone())
-        .and(warp::path::end())
-        .and_then(index)
-        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
-
-    let style = warp::get()
-        .and(warp::path("assets"))
-        .and(warp::path::param())
-        .and(warp::path::end())
-        .and_then(style)
-        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
-
-    let search = warp::any()
-        .and(db.clone())
-        .and(warp::path("search"))
-        .and(warp::path::end())
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(search)
-        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
-
-    let get_sig = warp::get()
-        .and(hbs.clone())
-        .and(db.clone())
-        .and(warp::path("-"))
-        .and(warp::path::param())
-        .and(warp::path::end())
-        .and_then(sig::get)
-        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
-
-    let get_issuer = warp::get()
-        .and(hbs.clone())
-        .and(db.clone())
-        .and(warp::path("issuer"))
-        .and(warp::path::param())
-        .and(warp::path::end())
-        .and_then(issuer::get)
-        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
-
-    let search_issuer = warp::get()
-        .and(db.clone())
-        .and(warp::path("issuer"))
-        .and(warp::path::end())
-        .and(warp::query::<issuer::IssuerSearch>())
-        .and_then(issuer::search)
-        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
-
-    let get_pkg = warp::get()
-        .and(hbs.clone())
-        .and(db.clone())
-        .and(warp::path("pkg"))
-        .and(warp::path::param())
-        .and(warp::path::param())
-        .and(warp::path::end())
-        .and_then(pkg::get)
-        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
-
-    let list_os_pkgs = warp::get()
-        .and(hbs.clone())
-        .and(db.clone())
-        .and(warp::path("pkg"))
-        .and(warp::path::param())
-        .and(warp::path::end())
-        .and_then(pkg::list_for_os)
-        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
-
-    let search_pkg = warp::get()
-        .and(hbs.clone())
-        .and(db.clone())
-        .and(warp::path("pkg"))
-        .and(warp::path::end())
-        .and(warp::query::<pkg::PkgSearch>())
-        .and_then(pkg::search)
-        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
-
-    let get_artifact = warp::get()
-        .and(hbs.clone())
-        .and(db.clone())
-        .and(warp::path("artifact"))
-        .and(warp::path::param())
-        .and(warp::path::end())
-        .and_then(artifact::get)
-        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
-
-    let search_artifact = warp::get()
-        .and(db.clone())
-        .and(warp::path("artifact"))
-        .and(warp::path::end())
-        .and(warp::query::<artifact::ArtifactSearch>())
-        .and_then(artifact::search)
-        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
-
-    let cache = warp::get()
-        .and(db.clone())
-        .and(warp::path("cache"))
-        .and(warp::path::param())
-        .and(warp::path::end())
-        .and_then(cache::get)
-        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT));
+    let index = index::endpoints(hbs.clone());
+    let search = warp::path("search").and(search::endpoints(db.clone()));
+    let sigs = sig::endpoints(hbs.clone(), db.clone());
+    let issuers = warp::path("issuer").and(issuer::endpoints(hbs.clone(), db.clone()));
+    let pkgs = warp::path("pkg").and(pkg::endpoints(hbs.clone(), db.clone()));
+    let artifacts = warp::path("artifact").and(artifact::endpoints(hbs.clone(), db.clone()));
+    let cache = warp::path("cache").and(cache::endpoints(db.clone()));
 
     let routes = warp::any()
         .and(
             index
-                .or(style)
-                .or(get_sig)
-                .or(get_issuer)
-                .or(search_issuer)
-                .or(get_pkg)
-                .or(list_os_pkgs)
-                .or(search_pkg)
-                .or(get_artifact)
-                .or(search_artifact)
+                .or(sigs)
+                .or(issuers)
+                .or(pkgs)
+                .or(artifacts)
                 .or(search)
                 .or(cache),
         )

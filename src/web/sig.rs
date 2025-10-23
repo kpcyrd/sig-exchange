@@ -1,11 +1,28 @@
 use crate::db;
 use crate::errors::*;
-use crate::web::Handlebars;
+use crate::web::{CACHE_CONTROL_DEFAULT, Handlebars, cache_control};
 use std::result;
 use std::sync::Arc;
-use warp::http::StatusCode;
+use warp::{Filter, http::StatusCode};
 
-pub(super) async fn get(
+pub(super) fn endpoints(
+    hbs: Arc<Handlebars>,
+    db: db::Client,
+) -> impl warp::Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    let hbs = warp::any().map(move || hbs.clone());
+    let db = warp::any().map(move || db.clone());
+
+    warp::get()
+        .and(hbs.clone())
+        .and(db.clone())
+        .and(warp::path("-"))
+        .and(warp::path::param())
+        .and(warp::path::end())
+        .and_then(get)
+        .map(|r| cache_control(r, CACHE_CONTROL_DEFAULT))
+}
+
+async fn get(
     hbs: Arc<Handlebars>,
     db: db::Client,
     chksum: String,
