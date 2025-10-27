@@ -3,6 +3,7 @@ use crate::{
     issuer::Issuer,
     pgp::PgpSig,
     pkg::{Artifact, Pkg, Upstream},
+    sig::Sig,
 };
 use chrono::{DateTime, Utc};
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
@@ -69,28 +70,22 @@ impl Client {
 
     pub async fn insert_sig(&self, sig: &PgpSig) -> Result<()> {
         let _result = sqlx::query(
-            "INSERT INTO sigs (chksum, family, issuer, sig_type, sig_version, hash_algo, sig_algo, creation_time, digest_prefix, bytes)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            "INSERT INTO sigs (chksum, family, issuer, bytes)
+            VALUES ($1, $2, $3, $4)
             ON CONFLICT (chksum) DO NOTHING
             ",
         )
         .bind(&sig.chksum)
         .bind(&sig.family)
         .bind(&sig.issuer)
-        .bind(sig.sig_type)
-        .bind(sig.sig_version)
-        .bind(&sig.hash_algo)
-        .bind(&sig.sig_algo)
-        .bind(sig.creation_time)
-        .bind(&sig.digest_prefix)
         .bind(&sig.bytes)
         .execute(&self.pool)
         .await?;
         Ok(())
     }
 
-    pub async fn get_sig(&self, chksum: &str) -> Result<PgpSig> {
-        let sig = sqlx::query_as::<_, PgpSig>(
+    pub async fn get_sig(&self, chksum: &str) -> Result<Sig> {
+        let sig = sqlx::query_as::<_, Sig>(
             "SELECT * FROM sigs
             WHERE chksum = $1",
         )
@@ -100,8 +95,8 @@ impl Client {
         Ok(sig)
     }
 
-    pub async fn list_sigs_for_issuer(&self, issuer: &str) -> Result<Vec<PgpSig>> {
-        let sigs = sqlx::query_as::<_, PgpSig>(
+    pub async fn list_sigs_for_issuer(&self, issuer: &str) -> Result<Vec<Sig>> {
+        let sigs = sqlx::query_as::<_, Sig>(
             "SELECT * FROM sigs
             WHERE issuer = $1
             ORDER BY creation_time DESC, chksum ASC",

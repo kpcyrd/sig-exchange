@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use sequoia_openpgp::{
     Packet, PacketPile, armor,
     packet::{Signature, signature::subpacket::SubpacketValue},
-    parse::Parse,
+    parse::{PacketParser, PacketParserResult, Parse},
     serialize::{
         Serialize as _,
         stream::{Armorer, Message},
@@ -16,13 +16,13 @@ use std::{
     time::UNIX_EPOCH,
 };
 
-#[derive(sqlx::FromRow, Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct PgpSig {
     pub chksum: String,
     pub family: String,
     pub issuer: String,
-    pub sig_type: i16,
-    pub sig_version: i16,
+    pub sig_type: u8,
+    pub sig_version: u8,
     pub hash_algo: String,
     pub sig_algo: String,
     pub creation_time: Option<DateTime<Utc>>,
@@ -43,6 +43,85 @@ impl PgpSig {
 
         let armored = String::from_utf8(sink)?;
         Ok(armored)
+    }
+}
+
+impl TryFrom<Signature> for PgpSig {
+    type Error = Error;
+
+    fn try_from(sig: Signature) -> Result<Self> {
+        let sig_type = u8::from(sig.typ());
+        let sig_version = sig.version();
+        let hash_algo = format_hash_algo(&sig.hash_algo());
+        let sig_algo = format_sig_algo(&sig.pk_algo());
+
+        let digest_prefix = format!(
+            "{:02X}{:02X}",
+            sig.digest_prefix()[0],
+            sig.digest_prefix()[1]
+        );
+
+        let mut issuer = None;
+        for subpacket in sig.hashed_area().iter().chain(sig.unhashed_area().iter()) {
+            /*
+            SubpacketValue::Issuer(keyid) => {
+                println!("Issuer Key ID: {}", keyid);
+            }
+            */
+            /*
+            SubpacketValue::SignersUserID(uid) => {
+                if let Ok(s) = std::str::from_utf8(uid) {
+                    println!("Signer User ID: {}", s);
+                }
+            }
+            */
+            if let SubpacketValue::IssuerFingerprint(fp) = subpacket.value() {
+                issuer = Some(format!("{:x}", fp));
+            }
+        }
+
+        // Get creation time
+        let creation_time = sig
+            .signature_creation_time()
+            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+            .and_then(|duration| DateTime::from_timestamp_secs(duration.as_secs() as i64));
+
+        let Some(issuer) = issuer else {
+            bail!("No issuer fingerprint found in signature, skipping");
+        };
+
+        let sig = encode_sig(sig)?;
+
+        Ok(Self {
+            chksum: sig::db_id(&sig),
+            family: "pgp".to_string(),
+            issuer,
+            sig_type,
+            sig_version,
+            hash_algo,
+            sig_algo,
+            creation_time,
+            digest_prefix,
+            bytes: sig,
+        })
+    }
+}
+
+impl TryFrom<&sig::Sig> for PgpSig {
+    type Error = Error;
+
+    fn try_from(value: &sig::Sig) -> Result<Self> {
+        let parser = PacketParser::from_bytes(&value.bytes)?;
+
+        let PacketParserResult::Some(ppr) = parser else {
+            bail!("No packets found in bytes");
+        };
+
+        let Ok((Packet::Signature(sig), _)) = ppr.next() else {
+            bail!("Expected packet type");
+        };
+
+        PgpSig::try_from(sig)
     }
 }
 
@@ -112,61 +191,7 @@ pub fn parse_sigs(content: &str) -> Result<Vec<PgpSig>> {
                     continue;
                 }
 
-                let sig_type = u8::from(sig.typ());
-                let sig_version = sig.version();
-                let hash_algo = format_hash_algo(&sig.hash_algo());
-                let sig_algo = format_sig_algo(&sig.pk_algo());
-
-                let digest_prefix = format!(
-                    "{:02X}{:02X}",
-                    sig.digest_prefix()[0],
-                    sig.digest_prefix()[1]
-                );
-
-                let mut issuer = None;
-                for subpacket in sig.hashed_area().iter().chain(sig.unhashed_area().iter()) {
-                    /*
-                    SubpacketValue::Issuer(keyid) => {
-                        println!("Issuer Key ID: {}", keyid);
-                    }
-                    */
-                    /*
-                    SubpacketValue::SignersUserID(uid) => {
-                        if let Ok(s) = std::str::from_utf8(uid) {
-                            println!("Signer User ID: {}", s);
-                        }
-                    }
-                    */
-                    if let SubpacketValue::IssuerFingerprint(fp) = subpacket.value() {
-                        issuer = Some(format!("{:x}", fp));
-                    }
-                }
-
-                // Get creation time
-                let creation_time = sig
-                    .signature_creation_time()
-                    .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
-                    .and_then(|duration| DateTime::from_timestamp_secs(duration.as_secs() as i64));
-
-                let Some(issuer) = issuer else {
-                    warn!("No issuer fingerprint found in signature, skipping");
-                    continue;
-                };
-
-                let sig = encode_sig(sig)?;
-
-                let sig = PgpSig {
-                    chksum: sig::db_id(&sig),
-                    family: "pgp".to_string(),
-                    issuer,
-                    sig_type: i16::from(sig_type),
-                    sig_version: i16::from(sig_version),
-                    hash_algo,
-                    sig_algo,
-                    creation_time,
-                    digest_prefix,
-                    bytes: sig,
-                };
+                let sig = PgpSig::try_from(sig)?;
                 // info!("Parsed PGP Signature: {sig:?}");
                 sigs.push(sig);
             }

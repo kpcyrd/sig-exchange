@@ -1,4 +1,13 @@
+use serde::Serialize;
 use std::collections::BTreeMap;
+
+#[derive(sqlx::FromRow, Debug, Serialize, PartialEq)]
+pub struct Sig {
+    pub chksum: String,
+    pub family: String,
+    pub issuer: String,
+    pub bytes: Vec<u8>,
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct RemoteSig {

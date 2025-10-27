@@ -1,5 +1,6 @@
 use crate::db;
 use crate::errors::*;
+use crate::pgp::PgpSig;
 use crate::web::{CACHE_CONTROL_DEFAULT, Handlebars, cache_control};
 use std::result;
 use std::sync::Arc;
@@ -32,6 +33,9 @@ async fn get(
         .map(|c| (c, true))
         .unwrap_or((&chksum, false));
     let sig = db.get_sig(chksum).await?;
+
+    // this is always "family = pgp" at this point
+    let sig = PgpSig::try_from(&sig).map_err(ApiError::Anyhow)?;
     let armored = sig.to_ascii_armored().map_err(ApiError::from)?;
 
     if download {
