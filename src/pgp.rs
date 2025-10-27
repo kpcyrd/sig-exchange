@@ -1,4 +1,7 @@
-use crate::{errors::*, sig};
+use crate::{
+    errors::*,
+    sig::{self, Sig},
+};
 use chrono::{DateTime, Utc};
 use sequoia_openpgp::{
     Packet, PacketPile, armor,
@@ -122,6 +125,19 @@ impl TryFrom<&sig::Sig> for PgpSig {
         };
 
         PgpSig::try_from(sig)
+    }
+}
+
+impl From<PgpSig> for Sig {
+    fn from(sig: PgpSig) -> Self {
+        Self {
+            chksum: sig.chksum,
+            family: sig.family,
+            issuer: sig.issuer,
+            bytes: sig.bytes,
+            hash_algo: Some(sig.hash_algo),
+            creation_time: sig.creation_time,
+        }
     }
 }
 

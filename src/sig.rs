@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -7,6 +8,8 @@ pub struct Sig {
     pub family: String,
     pub issuer: String,
     pub bytes: Vec<u8>,
+    pub hash_algo: Option<String>,
+    pub creation_time: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, PartialEq, Eq)]

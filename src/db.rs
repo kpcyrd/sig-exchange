@@ -1,7 +1,6 @@
 use crate::{
     errors::{ApiResult as Result, *},
     issuer::Issuer,
-    pgp::PgpSig,
     pkg::{Artifact, Pkg, Upstream},
     sig::Sig,
 };
@@ -68,17 +67,21 @@ impl Client {
         Ok(issuer)
     }
 
-    pub async fn insert_sig(&self, sig: &PgpSig) -> Result<()> {
+    pub async fn insert_sig(&self, sig: &Sig) -> Result<()> {
         let _result = sqlx::query(
-            "INSERT INTO sigs (chksum, family, issuer, bytes)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (chksum) DO NOTHING
+            "INSERT INTO sigs (chksum, family, issuer, bytes, hash_algo, creation_time)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (chksum) DO UPDATE SET
+            hash_algo = EXCLUDED.hash_algo,
+            creation_time = EXCLUDED.creation_time
             ",
         )
         .bind(&sig.chksum)
         .bind(&sig.family)
         .bind(&sig.issuer)
         .bind(&sig.bytes)
+        .bind(&sig.hash_algo)
+        .bind(sig.creation_time)
         .execute(&self.pool)
         .await?;
         Ok(())

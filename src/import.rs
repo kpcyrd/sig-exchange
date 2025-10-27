@@ -1,4 +1,4 @@
-use crate::{archlinux, args::Import, db, debian, errors::*, issuer::Issuer, pgp};
+use crate::{archlinux, args::Import, db, debian, errors::*, issuer::Issuer, pgp, sig::Sig};
 use tokio::fs;
 
 pub async fn run(cmd: &Import) -> Result<()> {
@@ -27,6 +27,7 @@ pub async fn run(cmd: &Import) -> Result<()> {
                     key: None,
                 })
                 .await?;
+                let sig = Sig::from(sig);
                 db.insert_sig(&sig).await?;
             }
         }
