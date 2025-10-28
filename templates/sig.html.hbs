@@ -15,7 +15,29 @@ Creation time: {{ sig.creation_time }}
 Digest prefix: {{ sig.digest_prefix }}
 </pre>
 
-<pre>{{ armored }}</pre>
+{{#if artifacts}}
+<h3>Artifacts</h3>
+<ul>
+    {{#each artifacts}}
+    <li><a href="/artifact/{{ this.artifact_chksum }}">{{ this.artifact_chksum }}</a>
+        <ul>
+            <li>
+            {{#if (eq this.verified null)}}
+            🔮 allegedly
+            {{else if this.verified }}
+            ✅ verified
+            {{else}}
+            ❌ failed verification
+            {{/if}}
+            ({{ this.os }})
+            </li>
+        </ul>
+    </li>
+    {{/each}}
+</ul>
+{{/if}}
+
+<pre id="sig">{{ armored }}</pre>
 
 {{/inline}}
 {{> base.html.hbs }}

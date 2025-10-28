@@ -29,3 +29,7 @@ header h1 a, header h1 a:visited {
   text-wrap: auto;
   overflow-wrap: anywhere;
 }
+
+pre#sig {
+  margin-top: 3rem;
+}

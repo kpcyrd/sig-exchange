@@ -2,7 +2,7 @@ use crate::{
     errors::{ApiResult as Result, *},
     issuer::Issuer,
     pkg::{Artifact, Pkg, Upstream},
-    sig::Sig,
+    sig::{Sig, SigLink},
 };
 use chrono::{DateTime, Utc};
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
@@ -355,5 +355,49 @@ impl Client {
         .fetch_one(&self.pool)
         .await?;
         Ok(row.0 as u64)
+    }
+
+    pub async fn insert_sig_link(&self, sig: &str, artifact: &Artifact) -> Result<()> {
+        debug!("Inserting sig-link: {sig:?} -> {artifact:?}");
+        let _result = sqlx::query(
+            "INSERT INTO sig_links (sig_chksum, artifact_chksum, os, pkg, version)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (sig_chksum, artifact_chksum, os, pkg, version) DO NOTHING
+            ",
+        )
+        .bind(sig)
+        .bind(&artifact.chksum)
+        .bind(&artifact.os)
+        .bind(&artifact.pkg)
+        .bind(&artifact.version)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn list_sig_links_for_sig(&self, sig: &str) -> Result<Vec<SigLink>> {
+        let links = sqlx::query_as::<_, _>(
+            "SELECT sig_chksum, artifact_chksum, os, bool_or(verified) as verified FROM sig_links
+            WHERE sig_chksum = $1
+            GROUP BY sig_chksum, artifact_chksum, os
+            ORDER BY artifact_chksum ASC, os ASC",
+        )
+        .bind(sig)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(links)
+    }
+
+    pub async fn list_sig_links_for_artifact(&self, artifact: &str) -> Result<Vec<SigLink>> {
+        let links = sqlx::query_as::<_, _>(
+            "SELECT sig_chksum, artifact_chksum, os, bool_or(verified) as verified FROM sig_links
+            WHERE artifact_chksum = $1
+            GROUP BY sig_chksum, artifact_chksum, os
+            ORDER BY sig_chksum ASC, os ASC",
+        )
+        .bind(artifact)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(links)
     }
 }

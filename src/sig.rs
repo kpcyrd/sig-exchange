@@ -19,6 +19,14 @@ pub struct RemoteSig {
     pub artifact_hashes: BTreeMap<&'static str, String>,
 }
 
+#[derive(sqlx::FromRow, Debug, Serialize, PartialEq)]
+pub struct SigLink {
+    pub sig_chksum: String,
+    pub artifact_chksum: String,
+    pub os: String,
+    pub verified: Option<bool>,
+}
+
 pub fn db_id(sig: &[u8]) -> String {
     let chksum = blake3::hash(sig);
     let mut chksum = format!("{chksum}");

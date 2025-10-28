@@ -42,11 +42,14 @@ async fn get(
         return Err(warp::reject::not_found());
     }
 
+    let sigs = db.list_sig_links_for_artifact(&chksum).await?;
+
     // TODO: add more data
     let html = hbs.render(
         "artifact.html.hbs",
         &serde_json::json!({
             "chksum": chksum,
+            "sigs": sigs,
         }),
     )?;
     Ok(Box::new(warp::reply::html(html)))

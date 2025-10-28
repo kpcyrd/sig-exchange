@@ -42,11 +42,14 @@ async fn get(
         let response = warp::reply::with_status(armored, StatusCode::OK);
         Ok(Box::new(response))
     } else {
+        let artifacts = db.list_sig_links_for_sig(chksum).await?;
+
         let html = hbs.render(
             "sig.html.hbs",
             &serde_json::json!({
                 "sig": sig,
                 "armored": armored,
+                "artifacts": artifacts,
             }),
         )?;
         Ok(Box::new(warp::reply::html(html)))

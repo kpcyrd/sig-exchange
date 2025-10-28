@@ -5,5 +5,27 @@ artifact {{ chksum }}: sig.exchange
 
 <h3>artifact: {{ chksum }}</h3>
 
+{{#if sigs}}
+<h3>Signatures</h3>
+<ul>
+    {{#each sigs}}
+    <li><a href="/-/{{ this.sig_chksum }}">{{ this.sig_chksum }}</a>
+        <ul>
+            <li>
+            {{#if (eq this.verified null)}}
+            🔮 allegedly
+            {{else if this.verified }}
+            ✅ verified
+            {{else}}
+            ❌ failed verification
+            {{/if}}
+            ({{ this.os }})
+            </li>
+        </ul>
+    </li>
+    {{/each}}
+</ul>
+{{/if}}
+
 {{/inline}}
 {{> base.html.hbs }}
