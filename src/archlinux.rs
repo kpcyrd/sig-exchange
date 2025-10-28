@@ -1,12 +1,11 @@
-use crate::{
-    db,
-    errors::*,
-    fetch,
-    issuer::Issuer,
-    pgp,
-    pkg::{Artifact, Pkg, Upstream},
-    srcinfo,
-};
+use crate::db;
+use crate::errors::*;
+use crate::fetch;
+use crate::issuer::Issuer;
+use crate::pgp;
+use crate::pkg::{Pkg, Upstream};
+use crate::sig;
+use crate::srcinfo;
 use alpm_types::OpenPGPIdentifier;
 use async_compression::tokio::bufread::BzDecoder;
 use chrono::{DateTime, Utc};
@@ -156,18 +155,17 @@ pub async fn import_pkg<R: AsyncRead + Unpin>(db: &db::Client, reader: R) -> Res
                 .await?;
             }
 
-            for sig in pkg.sigs {
-                for (algo, hash) in sig.artifact_hashes {
-                    db.insert_artifact(&Artifact {
-                        chksum: format!("{algo}:{hash}"),
-                        url: sig.artifact_url.clone(),
-                        os: OS.to_string(),
-                        pkg: pkg.name.clone(),
-                        version: pkg.version.clone(),
-                    })
-                    .await?;
-                }
-            }
+            sig::insert_remote_sigs(
+                db,
+                &pkg.sigs,
+                &Pkg {
+                    os: OS.to_string(),
+                    name: pkg.name,
+                    version: pkg.version,
+                    release_datetime,
+                },
+            )
+            .await?;
         }
     }
 

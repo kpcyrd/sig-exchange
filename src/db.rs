@@ -2,7 +2,7 @@ use crate::{
     errors::{ApiResult as Result, *},
     issuer::Issuer,
     pkg::{Artifact, Pkg, Upstream},
-    sig::{Sig, SigLink},
+    sig::{Sig, SigLink, SigQueueItem},
 };
 use chrono::{DateTime, Utc};
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
@@ -399,5 +399,40 @@ impl Client {
         .fetch_all(&self.pool)
         .await?;
         Ok(links)
+    }
+
+    pub async fn insert_remote_sig(
+        &self,
+        url: &str,
+        artifact_chksums: &[String],
+        pkg: &Pkg,
+    ) -> Result<()> {
+        info!("Inserting remote-sig: {url:?} -> {artifact_chksums:?}");
+        let _result = sqlx::query(
+            "INSERT INTO remote_sigs (url, next_fetch, artifact_chksums, os, pkg, version)
+            VALUES ($1, NOW(), $2, $3, $4, $5)
+            ON CONFLICT (url, os, pkg, version) DO NOTHING
+            ",
+        )
+        .bind(url)
+        .bind(artifact_chksums)
+        .bind(&pkg.os)
+        .bind(&pkg.name)
+        .bind(&pkg.version)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn next_remote_sig_queue_items(&self) -> Result<Vec<SigQueueItem>> {
+        let item = sqlx::query_as::<_, _>(
+            "SELECT url, next_fetch, attempts, sigs, artifact_chksum, os, pkg, version FROM remote_sigs
+            WHERE sigs IS NULL AND next_fetch <= NOW()
+            ORDER BY next_fetch ASC
+            LIMIT 25",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(item)
     }
 }

@@ -1,6 +1,6 @@
 use crate::issuer::Issuer;
-use crate::pkg::{Artifact, Pkg, Upstream};
-use crate::sig::RemoteSig;
+use crate::pkg::{Pkg, Upstream};
+use crate::sig::{self, RemoteSig};
 use crate::{db, errors::*, fetch, pgp};
 use chrono::{DateTime, Utc};
 use debian_changelog::ChangeLog;
@@ -234,18 +234,17 @@ pub async fn import_sources(db: db::Client) -> Result<()> {
             .await?;
         }
 
-        for sig in pkg.sigs {
-            for (algo, hash) in sig.artifact_hashes {
-                db.insert_artifact(&Artifact {
-                    chksum: format!("{algo}:{hash}"),
-                    url: sig.artifact_url.clone(),
-                    os: OS.to_string(),
-                    pkg: pkg.name.clone(),
-                    version: pkg.version.clone(),
-                })
-                .await?;
-            }
-        }
+        sig::insert_remote_sigs(
+            &db,
+            &pkg.sigs,
+            &Pkg {
+                os: OS.to_string(),
+                name: pkg.name,
+                version: pkg.version,
+                release_datetime,
+            },
+        )
+        .await?;
     }
 
     Ok(())

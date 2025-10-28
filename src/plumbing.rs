@@ -39,6 +39,15 @@ pub async fn run(cmd: Plumbing) -> Result<()> {
                 .with_context(|| format!("Failed to fetch URL: {url}"))?;
             info!("Fetched {} bytes", bytes.len());
         }
+        Plumbing::FetchSigQueue => {
+            let db = db::Client::create().await?;
+            for item in db.next_remote_sig_queue_items().await? {
+                info!(
+                    "Fetching sigs for artifact {:?} from {} (attempts={})",
+                    item.artifact_chksums, item.url, item.attempts
+                );
+            }
+        }
         Plumbing::Migrate => {
             let _db = db::Client::create().await?;
             info!("All migrations have been applied");
