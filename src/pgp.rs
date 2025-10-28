@@ -2,6 +2,7 @@ use crate::{
     errors::*,
     sig::{self, Sig},
 };
+use bstr::ByteSlice;
 use chrono::{DateTime, Utc};
 use sequoia_openpgp::{
     Packet, PacketPile, armor,
@@ -141,12 +142,12 @@ impl From<PgpSig> for Sig {
     }
 }
 
-fn split(content: &str) -> Vec<&str> {
-    let mut blocks: Vec<&str> = Vec::new();
+fn split(content: &[u8]) -> Vec<&[u8]> {
+    let mut blocks: Vec<&[u8]> = Vec::new();
     let mut current_block_start = 0;
 
     // Find each "-----BEGIN PGP SIGNATURE-----" and split there
-    for (idx, _) in content.match_indices("-----BEGIN PGP ") {
+    for idx in content.find_iter(b"-----BEGIN PGP ") {
         if idx > 0 && current_block_start < idx {
             blocks.push(&content[current_block_start..idx]);
         }
@@ -176,7 +177,7 @@ fn encode_sig(sig: Signature) -> Result<Vec<u8>> {
     Ok(buf)
 }
 
-pub fn parse_sigs(content: &str) -> Result<Vec<PgpSig>> {
+pub fn parse_sigs(content: &[u8]) -> Result<Vec<PgpSig>> {
     let blocks = split(content);
 
     let mut sigs = Vec::new();
@@ -185,8 +186,7 @@ pub fn parse_sigs(content: &str) -> Result<Vec<PgpSig>> {
             continue;
         }
 
-        let block_bytes = block.as_bytes();
-        let cursor = Cursor::new(block_bytes);
+        let cursor = Cursor::new(block);
 
         let pile = match PacketPile::from_reader(cursor) {
             Ok(pile) => pile,
@@ -223,7 +223,7 @@ pub struct PgpKey {
     pub bytes: Vec<u8>,
 }
 
-pub fn parse_keys(content: &str) -> Result<Vec<PgpKey>> {
+pub fn parse_keys(content: &[u8]) -> Result<Vec<PgpKey>> {
     let blocks = split(content);
 
     let mut keys = Vec::new();
@@ -232,8 +232,7 @@ pub fn parse_keys(content: &str) -> Result<Vec<PgpKey>> {
             continue;
         }
 
-        let block_bytes = block.as_bytes();
-        let cursor = Cursor::new(block_bytes);
+        let cursor = Cursor::new(block);
 
         let pile = match PacketPile::from_reader(cursor) {
             Ok(pile) => pile,
@@ -269,13 +268,13 @@ mod tests {
 
     #[test]
     fn test_split() {
-        let content = include_str!("../test_data/SHA256SUMS.asc");
+        let content = include_bytes!("../test_data/SHA256SUMS.asc");
         let blocks = split(content);
         assert_eq!(blocks.len(), 13);
         assert_eq!(
             &blocks[..5],
             &[
-                "-----BEGIN PGP SIGNATURE-----
+                &b"-----BEGIN PGP SIGNATURE-----
 
 iQEzBAABCAAdFiEEEBWY3II8G1+aZiSrpeCQegOA5sMFAmd/tDwACgkQpeCQegOA
 5sPpnAgApjo0MWURz51sZZye3hQ+Ek0xINYdDaeVXURnmdM3lI6feTIVlLIvPN2k
@@ -286,8 +285,8 @@ xkNO9QtN6fOGHs3u409v6ESlM0AXI0ceqLA8bzf9w/iv34xYf2h3DpHMTGy+fpt6
 zkGbF/zokANci4YFpbY776TSifwZbQ==
 =OJ8B
 -----END PGP SIGNATURE-----
-",
-                "-----BEGIN PGP SIGNATURE-----
+"[..],
+                b"-----BEGIN PGP SIGNATURE-----
 
 iQJEBAABCAAuFiEEFSgSMAeFyWRE0zNNF1ZXMuCOXkEFAmd9x2UQHG1lQGFjaG93
 MTAxLmNvbQAKCRAXVlcy4I5eQTpkD/9gAH88aIa69Omvfsg//8UNOTCZj4zVGRMe
@@ -305,7 +304,7 @@ QrIzb9irBQ==
 =76yC
 -----END PGP SIGNATURE-----
 ",
-                "-----BEGIN PGP SIGNATURE-----
+                b"-----BEGIN PGP SIGNATURE-----
 
 iQJIBAABCAAyFiEE5hdzzW4BBA4vG9eM5+KYS2KJyToFAmd+p94UHHBpbmhlYWRt
 ekBnbWFpbC5jb20ACgkQ5+KYS2KJyTonXBAAwNNqtNDMi4rXjTJSpr9CKVM0hN9j
@@ -323,7 +322,7 @@ pHoirSmYjn1H/34=
 =Vv1t
 -----END PGP SIGNATURE-----
 ",
-                "-----BEGIN PGP SIGNATURE-----
+                b"-----BEGIN PGP SIGNATURE-----
 
 iQEzBAABCgAdFiEEnerg3HBjJJ+wVHRoHkrtYphs0l0FAmd+L/8ACgkQHkrtYphs
 0l2Hegf+MmNcsoox2IrOE0AYxYOp4CcncfLOmI+JiKd28cV07XCd+9T0UFJtproL
@@ -335,7 +334,7 @@ r/2flkhltNHTl6oLUM3mwxwgnon/LA==
 =/x/l
 -----END PGP SIGNATURE-----
 ",
-                "-----BEGIN PGP SIGNATURE-----
+                b"-----BEGIN PGP SIGNATURE-----
 
 iI4EABMIADYWIQTDiPaWH7lyqVZ44yf2JxHb3KiuVgUCZ33JPBgca3ZhY2lyYWxA
 cHJvdG9ubWFpbC5jb20ACgkQ9icR29yorlZc8AEA1msV0ubjjhDSBx5ZpOEXchL/
@@ -348,8 +347,8 @@ D8HuQ5y6wuF2v9ikiJIA/1JRjc1j0jNr7+JihZln8qXiahqCBChUHxXWvm5CjWIy
     }
 
     #[test]
-    fn test_parse_sigs() {
-        let content = include_str!("../test_data/SHA256SUMS.asc");
+    fn test_parse_sigs_asc() {
+        let content = include_bytes!("../test_data/SHA256SUMS.asc");
         let mut sigs = parse_sigs(content).unwrap();
         for sig in &mut sigs {
             // Clear bytes for comparison
@@ -571,10 +570,38 @@ D8HuQ5y6wuF2v9ikiJIA/1JRjc1j0jNr7+JihZln8qXiahqCBChUHxXWvm5CjWIy
     }
 
     #[test]
+    fn test_parse_sigs_binary() {
+        let content = include_bytes!("../test_data/dfrs-0.0.7.tar.gz.sig");
+        let mut sigs = parse_sigs(content).unwrap();
+        for sig in &mut sigs {
+            // Clear bytes for comparison
+            sig.bytes.clear();
+        }
+        assert_eq!(
+            sigs,
+            &[PgpSig {
+                chksum: "4dcd1ace3f1b49e18b6b64df35be080d".to_string(),
+                family: "pgp".to_string(),
+                issuer: "e240b57e2c4630ba768e2f26fc1b547c8d8172c8".to_string(),
+                sig_type: 0,
+                sig_version: 4,
+                hash_algo: "SHA256".to_string(),
+                sig_algo: "RSAEncryptSign".to_string(),
+                creation_time: Some(
+                    DateTime::parse_from_rfc3339("2021-02-11T00:10:30Z")
+                        .unwrap()
+                        .with_timezone(&Utc)
+                ),
+                digest_prefix: "2F00".to_string(),
+                bytes: vec![]
+            },]
+        );
+    }
+
+    #[test]
     fn test_parse_keys() {
         let content = include_bytes!("../test_data/debian-apache-signing-keys.asc");
-        let content = String::from_utf8_lossy(content);
-        let keys = parse_keys(&content).unwrap();
+        let keys = parse_keys(content).unwrap();
 
         let keys = keys.into_iter().map(|k| k.fingerprint).collect::<Vec<_>>();
         assert_eq!(

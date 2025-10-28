@@ -113,6 +113,7 @@ pub fn parse(srcinfo: &str) -> Result<Pkg> {
             sig_url: location(sig_src)
                 .with_context(|| anyhow!("Failed to get location for source #{idx}"))?
                 .to_string(),
+            family: "pgp".to_string(),
             artifact_url: location(artifact_src)
                 .with_context(|| anyhow!("Failed to get location for source #{idx}"))?
                 .to_string(),
@@ -139,6 +140,7 @@ mod tests {
                 signing_keys: vec!["64B13F7117D6E07D661BBCE0FE763A64F5E54FD6".parse().unwrap()],
                 sigs: vec![RemoteSig {
                     sig_url: "https://github.com/kpcyrd/rebuilderd/releases/download/v0.25.0/rebuilderd-0.25.0.tar.gz.asc".to_string(),
+                    family: "pgp".to_string(),
                     artifact_url: "https://github.com/kpcyrd/rebuilderd/archive/refs/tags/v0.25.0.tar.gz".to_string(),
                     artifact_hashes: [
                         ("blake2b", "d8700167849f09eb2667e198f5c91f4a910566f3b1a7100a4f835181b9aff17892d9c976665e5dc60c6bec74ac9262d673c9add3cbe62470f90cc5fd4912d2dc".to_string()),

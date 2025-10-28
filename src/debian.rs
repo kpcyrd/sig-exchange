@@ -106,6 +106,7 @@ pub async fn parse_source_index<R: AsyncRead + Unpin>(mut reader: R) -> Result<V
 
             pkg.sigs.push(RemoteSig {
                 sig_url: format!("https://deb.debian.org/debian/{directory}/{sig_filename}"),
+                family: "pgp".to_string(),
                 artifact_url: format!("https://deb.debian.org/debian/{directory}/{filename}"),
                 artifact_hashes: [("sha256", sha256.to_string())].into_iter().collect(),
             });
@@ -198,7 +199,7 @@ pub async fn import_sources(db: db::Client) -> Result<()> {
             }
         };
 
-        let keys = pgp::parse_keys(&signing_keys)
+        let keys = pgp::parse_keys(signing_keys.as_bytes())
             .with_context(|| format!("Failed to parse PGP keys for package {:?}", pkg.name))?;
 
         if keys.is_empty() {
@@ -299,6 +300,7 @@ Section: net
                     sig_url:
                         "https://deb.debian.org/debian/pool/main/2/2ping/2ping_4.5.orig.tar.gz.asc"
                             .to_string(),
+                    family: "pgp".to_string(),
                     artifact_url:
                         "https://deb.debian.org/debian/pool/main/2/2ping/2ping_4.5.orig.tar.gz"
                             .to_string(),

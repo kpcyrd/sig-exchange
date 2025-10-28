@@ -142,7 +142,7 @@ pub async fn import_pkg<R: AsyncRead + Unpin>(db: &db::Client, reader: R) -> Res
         }
 
         if let Some(signing_keys) = signing_keys {
-            let keys = pgp::parse_keys(&signing_keys)
+            let keys = pgp::parse_keys(signing_keys.as_bytes())
                 .with_context(|| format!("Failed to parse PGP keys for package {:?}", pkg.name))?;
 
             // We only add the bytes to the database, these files don't imply trust on their own
@@ -241,6 +241,7 @@ mod tests {
             signing_keys: vec!["64B13F7117D6E07D661BBCE0FE763A64F5E54FD6".parse().unwrap()],
             sigs: vec![RemoteSig {
                 sig_url: "https://github.com/kpcyrd/rebuilderd/releases/download/v0.25.0/rebuilderd-0.25.0.tar.gz.asc".to_string(),
+                family: "pgp".to_string(),
                 artifact_url: "https://github.com/kpcyrd/rebuilderd/archive/refs/tags/v0.25.0.tar.gz".to_string(),
                 artifact_hashes: [
                     ("blake2b", "d8700167849f09eb2667e198f5c91f4a910566f3b1a7100a4f835181b9aff17892d9c976665e5dc60c6bec74ac9262d673c9add3cbe62470f90cc5fd4912d2dc".to_string()),

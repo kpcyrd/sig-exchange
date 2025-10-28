@@ -1,8 +1,9 @@
 use crate::{
     errors::{ApiResult as Result, *},
+    import::SigQueueItem,
     issuer::Issuer,
     pkg::{Artifact, Pkg, Upstream},
-    sig::{Sig, SigLink, SigQueueItem},
+    sig::{Sig, SigLink},
 };
 use chrono::{DateTime, Utc};
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
@@ -357,8 +358,15 @@ impl Client {
         Ok(row.0 as u64)
     }
 
-    pub async fn insert_sig_link(&self, sig: &str, artifact: &Artifact) -> Result<()> {
-        debug!("Inserting sig-link: {sig:?} -> {artifact:?}");
+    pub async fn insert_sig_link(
+        &self,
+        sig: &str,
+        artifact_chksum: &str,
+        os: &str,
+        pkg: &str,
+        version: &str,
+    ) -> Result<()> {
+        debug!("Inserting sig-link: {sig:?} -> {artifact_chksum:?}");
         let _result = sqlx::query(
             "INSERT INTO sig_links (sig_chksum, artifact_chksum, os, pkg, version)
             VALUES ($1, $2, $3, $4, $5)
@@ -366,10 +374,10 @@ impl Client {
             ",
         )
         .bind(sig)
-        .bind(&artifact.chksum)
-        .bind(&artifact.os)
-        .bind(&artifact.pkg)
-        .bind(&artifact.version)
+        .bind(artifact_chksum)
+        .bind(os)
+        .bind(pkg)
+        .bind(version)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -404,17 +412,19 @@ impl Client {
     pub async fn insert_remote_sig(
         &self,
         url: &str,
+        family: &str,
         artifact_chksums: &[String],
         pkg: &Pkg,
     ) -> Result<()> {
         info!("Inserting remote-sig: {url:?} -> {artifact_chksums:?}");
         let _result = sqlx::query(
-            "INSERT INTO remote_sigs (url, next_fetch, artifact_chksums, os, pkg, version)
-            VALUES ($1, NOW(), $2, $3, $4, $5)
-            ON CONFLICT (url, os, pkg, version) DO NOTHING
+            "INSERT INTO remote_sigs (url, family, next_fetch, artifact_chksums, os, pkg, version)
+            VALUES ($1, $2, NOW(), $3, $4, $5, $6)
+            ON CONFLICT (url, family, os, pkg, version) DO NOTHING
             ",
         )
         .bind(url)
+        .bind(family)
         .bind(artifact_chksums)
         .bind(&pkg.os)
         .bind(&pkg.name)
@@ -426,7 +436,7 @@ impl Client {
 
     pub async fn next_remote_sig_queue_items(&self) -> Result<Vec<SigQueueItem>> {
         let item = sqlx::query_as::<_, _>(
-            "SELECT url, next_fetch, attempts, sigs, artifact_chksum, os, pkg, version FROM remote_sigs
+            "SELECT * FROM remote_sigs
             WHERE sigs IS NULL AND next_fetch <= NOW()
             ORDER BY next_fetch ASC
             LIMIT 25",
@@ -434,5 +444,44 @@ impl Client {
         .fetch_all(&self.pool)
         .await?;
         Ok(item)
+    }
+
+    pub async fn retry_remote_sig_queue_item(&self, item: &SigQueueItem) -> Result<()> {
+        let next_fetch = item.next_retry();
+
+        let _result = sqlx::query(
+            "UPDATE remote_sigs
+            SET attempts = attempts + 1,
+            next_fetch = $1
+            WHERE url = $2 AND family = $3 AND os = $4 AND pkg = $5 AND version = $6
+            ",
+        )
+        .bind(next_fetch)
+        .bind(&item.url)
+        .bind(&item.family)
+        .bind(&item.os)
+        .bind(&item.pkg)
+        .bind(&item.version)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn solve_remote_sig_queue_item(&self, item: &SigQueueItem) -> Result<()> {
+        let _result = sqlx::query(
+            "UPDATE remote_sigs
+            SET sigs = $1
+            WHERE url = $2 AND family = $3 AND os = $4 AND pkg = $5 AND version = $6
+            ",
+        )
+        .bind(&item.sigs)
+        .bind(&item.url)
+        .bind(&item.family)
+        .bind(&item.os)
+        .bind(&item.pkg)
+        .bind(&item.version)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 }

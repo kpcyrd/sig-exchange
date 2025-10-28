@@ -41,11 +41,13 @@ pub async fn run(cmd: Plumbing) -> Result<()> {
         }
         Plumbing::FetchSigQueue => {
             let db = db::Client::create().await?;
-            for item in db.next_remote_sig_queue_items().await? {
+            let http = fetch::Client::new(db.clone())?;
+            for mut item in db.next_remote_sig_queue_items().await? {
                 info!(
                     "Fetching sigs for artifact {:?} from {} (attempts={})",
                     item.artifact_chksums, item.url, item.attempts
                 );
+                item.fetch_and_store(&db, &http).await?;
             }
         }
         Plumbing::Migrate => {
@@ -56,11 +58,10 @@ pub async fn run(cmd: Plumbing) -> Result<()> {
             let buf = fs::read(&path)
                 .await
                 .with_context(|| format!("Failed to read file: {path:?}"))?;
-            let buf = String::from_utf8_lossy(&buf).into_owned();
             pgp::parse_keys(&buf)?;
         }
         Plumbing::PgpSigs { path } => {
-            let buf = fs::read_to_string(&path)
+            let buf = fs::read(&path)
                 .await
                 .with_context(|| format!("Failed to read file: {path:?}"))?;
             pgp::parse_sigs(&buf)?;
