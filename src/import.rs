@@ -75,6 +75,7 @@ impl SigQueueItem {
                         .await?;
                     }
                 }
+                info!("Added {} signatures to database", sigs.len());
 
                 self.sigs = Some(sigs);
                 db.solve_remote_sig_queue_item(self).await?;
