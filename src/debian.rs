@@ -236,7 +236,7 @@ pub async fn import_sources(db: &db::Client) -> Result<()> {
         }
 
         sig::insert_remote_sigs(
-            &db,
+            db,
             &pkg.sigs,
             &Pkg {
                 os: OS.to_string(),

@@ -95,7 +95,7 @@ pub async fn import_tree(db: &db::Client) -> Result<()> {
         let data = client.fetch(&url).await?;
         debug!("Fetched {} bytes", data.len());
 
-        if let Err(err) = import_pkg(&db, &data[..]).await {
+        if let Err(err) = import_pkg(db, &data[..]).await {
             error!("Failed to import package {pkgbase} from archlinux tree: {err:#}");
         }
     }
