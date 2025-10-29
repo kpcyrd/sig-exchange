@@ -66,13 +66,17 @@ pub async fn run(cmd: Plumbing) -> Result<()> {
             let buf = fs::read(&path)
                 .await
                 .with_context(|| format!("Failed to read file: {path:?}"))?;
-            pgp::parse_keys(&buf)?;
+            for key in pgp::parse_keys(&buf)? {
+                println!("key={key:#?}");
+            }
         }
         Plumbing::PgpSigs { path } => {
             let buf = fs::read(&path)
                 .await
                 .with_context(|| format!("Failed to read file: {path:?}"))?;
-            pgp::parse_sigs(&buf)?;
+            for sig in pgp::parse_sigs(&buf)? {
+                println!("sig={sig:#?}");
+            }
         }
         Plumbing::PingDb => {
             let db = db::Client::create_no_migrations().await?;

@@ -196,6 +196,7 @@ pub fn parse_sigs(content: &[u8]) -> Result<Vec<PgpSig>> {
             }
         };
         for packet in pile.descendants() {
+            trace!("Found pgp packet: {packet:?}");
             if let Packet::Signature(sig) = packet {
                 let sig = sig.normalize();
 
@@ -208,7 +209,7 @@ pub fn parse_sigs(content: &[u8]) -> Result<Vec<PgpSig>> {
                 }
 
                 let sig = PgpSig::try_from(sig)?;
-                // info!("Parsed PGP Signature: {sig:?}");
+                trace!("Parsed PGP Signature: {sig:?}");
                 sigs.push(sig);
             }
         }
