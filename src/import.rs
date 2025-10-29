@@ -45,6 +45,13 @@ impl SigQueueItem {
 
         let mut sigs = Vec::new();
         for sig in pgp::parse_sigs(&body)? {
+            db.insert_issuer(&Issuer {
+                fingerprint: sig.issuer.clone(),
+                family: sig.family.clone(),
+                key: None,
+            })
+            .await?;
+
             let sig = Sig::from(sig);
             db.insert_sig(&sig).await?;
             sigs.push(sig.chksum);
