@@ -42,7 +42,7 @@ fn normalize_archlinux_gitlab_names(package: &str) -> String {
     out
 }
 
-pub async fn import_tree(db: db::Client) -> Result<()> {
+pub async fn import_tree(db: &db::Client) -> Result<()> {
     let client = fetch::Client::new(db.clone())?;
 
     let state_url =

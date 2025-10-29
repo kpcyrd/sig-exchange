@@ -13,6 +13,7 @@ pub struct Args {
 pub enum SubCommand {
     #[command(alias = "daemon")]
     Web(Web),
+    Worker,
     #[command(subcommand)]
     Import(Import),
     #[command(subcommand)]

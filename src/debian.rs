@@ -168,7 +168,7 @@ pub async fn parse_source_tar<R: AsyncRead + Unpin>(
     Ok((release_time, signing_keys))
 }
 
-pub async fn import_sources(db: db::Client) -> Result<()> {
+pub async fn import_sources(db: &db::Client) -> Result<()> {
     let client = fetch::Client::new(db.clone())?;
 
     let url = "https://deb.debian.org/debian/dists/unstable/main/source/Sources.xz";

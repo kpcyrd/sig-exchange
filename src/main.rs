@@ -12,6 +12,7 @@ mod plumbing;
 mod sig;
 mod srcinfo;
 mod web;
+mod worker;
 
 use crate::args::Args;
 use crate::errors::*;
@@ -34,6 +35,7 @@ async fn main() -> Result<()> {
     trace!("Args: {args:#?}");
     match args.subcommand {
         args::SubCommand::Web(web) => web::run(&web).await,
+        args::SubCommand::Worker => worker::run().await,
         args::SubCommand::Import(import) => import::run(&import).await,
         args::SubCommand::Plumbing(plumbing) => plumbing::run(plumbing).await,
     }
