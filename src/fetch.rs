@@ -60,13 +60,12 @@ impl<R: AsyncBufRead + Unpin> AsyncRead for Decompress<R> {
     }
 }
 
-pub struct Client {
+pub struct HttpClient {
     client: reqwest::Client,
-    db: db::Client,
 }
 
-impl Client {
-    pub fn new(db: db::Client) -> Result<Self> {
+impl HttpClient {
+    pub fn new() -> Result<Self> {
         let mut builder = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(10))
             .read_timeout(Duration::from_secs(80));
@@ -78,23 +77,10 @@ impl Client {
 
         let client = builder.build()?;
 
-        Ok(Self { client, db })
+        Ok(Self { client })
     }
 
-    pub async fn fetch(&self, url: &str) -> Result<Vec<u8>> {
-        if let Some(cached) = self.db.get_cache_by_url(url).await? {
-            return Ok(cached);
-        }
-
-        let (filename, bytes) = self.fetch_no_cache(url).await?;
-
-        debug!("Caching fetched URL: {:?}", url);
-        self.db.put_cache(url, filename.as_deref(), &bytes).await?;
-
-        Ok(bytes.to_vec())
-    }
-
-    pub async fn fetch_no_cache(&self, url: &str) -> Result<(Option<String>, Vec<u8>)> {
+    pub async fn fetch(&self, url: &str) -> Result<(Option<String>, Vec<u8>)> {
         info!("Fetching URL: {:?}", url);
         let url = url
             .parse::<reqwest::Url>()
@@ -115,6 +101,42 @@ impl Client {
         let resp = self.client.get(url).send().await?.error_for_status()?;
         let stream = resp.bytes_stream().map(|b| b.map_err(io::Error::other));
         Ok(Box::pin(stream))
+    }
+}
+
+pub struct Client {
+    http: HttpClient,
+    db: db::Client,
+}
+
+impl Client {
+    pub fn new(db: db::Client) -> Result<Self> {
+        let http = HttpClient::new()?;
+        Ok(Self { http, db })
+    }
+
+    pub async fn fetch(&self, url: &str) -> Result<Vec<u8>> {
+        if let Some(cached) = self.db.get_cache_by_url(url).await? {
+            return Ok(cached);
+        }
+
+        let (filename, bytes) = self.fetch_no_cache(url).await?;
+
+        debug!("Caching fetched URL: {:?}", url);
+        self.db.put_cache(url, filename.as_deref(), &bytes).await?;
+
+        Ok(bytes.to_vec())
+    }
+
+    pub async fn fetch_no_cache(&self, url: &str) -> Result<(Option<String>, Vec<u8>)> {
+        self.http.fetch(url).await
+    }
+
+    pub async fn stream(
+        &self,
+        url: &str,
+    ) -> Result<Pin<Box<dyn Stream<Item = io::Result<Bytes>>>>> {
+        self.http.stream(url).await
     }
 }
 

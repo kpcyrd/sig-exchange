@@ -51,6 +51,8 @@ pub enum Plumbing {
     DebianTar { path: PathBuf },
     /// Fetch a URL using the HTTP cache and display the number of bytes received
     FetchCache { url: String },
+    /// Fetch a URL and stream response to stdout
+    Fetch { url: String },
     /// Fetch pending remote signatures from the queue
     FetchSigQueue,
     /// Run database migrations
