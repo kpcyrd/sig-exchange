@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-alpm-srcinfo = { version = "0.4.0", default-features = false }
-alpm-types = "0.8.0"
+alpm-srcinfo = { version = "0.6", default-features = false }
+alpm-types = "0.11"
 anyhow = "1.0.100"
 astral-tokio-tar = "0.5.6"
 async-compression = { version = "0.4.32", features = ["bzip2", "gzip", "tokio", "xz"] }
