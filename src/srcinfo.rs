@@ -25,7 +25,7 @@ fn filename(src: &AlpmSource) -> Result<String> {
                 let filename = url
                     .path_segments()
                     .and_then(|mut segments| segments.next_back())
-                    .and_then(|s| if s.is_empty() { None } else { Some(s) })
+                    .filter(|s| !s.is_empty())
                     .with_context(|| anyhow!("Failed to extract filename from URL: {url}"))?;
                 Ok(filename.to_string())
             }
