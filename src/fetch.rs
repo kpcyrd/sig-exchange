@@ -9,18 +9,15 @@ use tokio::io::{self, AsyncBufRead, AsyncRead};
 use tokio_stream::{Stream, StreamExt};
 
 fn filename_from_url(url: &reqwest::Url) -> Result<String> {
-    let segments = url
+    let mut segments = url
         .path_segments()
         .with_context(|| format!("Failed to extract path segments from URL: {:?}", url))?;
-    let filename = segments
-        .filter(|s| !s.is_empty())
-        .next_back()
-        .with_context(|| {
-            format!(
-                "Failed to extract filename from URL path segments: {:?}",
-                url
-            )
-        })?;
+    let filename = segments.rfind(|s| !s.is_empty()).with_context(|| {
+        format!(
+            "Failed to extract filename from URL path segments: {:?}",
+            url
+        )
+    })?;
     Ok(filename.to_string())
 }
 
