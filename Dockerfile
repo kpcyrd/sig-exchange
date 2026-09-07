@@ -1,4 +1,4 @@
-FROM rust:1-alpine3.22
+FROM rust:1-alpine3.24
 ENV RUSTFLAGS="-C target-feature=-crt-static"
 RUN apk add musl-dev
 WORKDIR /app
@@ -9,7 +9,7 @@ RUN --mount=type=cache,target=/var/cache/buildkit \
     cargo build --release --locked && \
     cp -v /var/cache/buildkit/target/release/sig-exchange /
 
-FROM alpine:3.22
+FROM alpine:3.24
 RUN apk add libgcc
 COPY --from=0 /sig-exchange /
 USER nobody

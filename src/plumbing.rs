@@ -1,7 +1,6 @@
-use crate::{archlinux, db, debian, errors::*, fetch, pgp};
-use crate::{args::Plumbing, srcinfo};
+use crate::{archlinux, args::Plumbing, db, debian, errors::*, fetch, pgp, srcinfo};
 use tokio::fs;
-use tokio::io::BufReader;
+use tokio::io::{self, BufReader};
 
 pub async fn run(cmd: Plumbing) -> Result<()> {
     match cmd {
@@ -38,6 +37,15 @@ pub async fn run(cmd: Plumbing) -> Result<()> {
                 .await
                 .with_context(|| format!("Failed to fetch URL: {url}"))?;
             info!("Fetched {} bytes", bytes.len());
+        }
+        Plumbing::Fetch { url } => {
+            let client = fetch::HttpClient::new()?;
+            let stream = client
+                .stream(&url)
+                .await
+                .with_context(|| format!("Failed to fetch URL: {url}"))?;
+            let mut reader = tokio_util::io::StreamReader::new(stream);
+            io::copy(&mut reader, &mut io::stdout()).await?;
         }
         Plumbing::FetchSigQueue => {
             let db = db::Client::create().await?;
