@@ -21,7 +21,7 @@ fn filename(src: &AlpmSource) -> Result<String> {
                 let filename = filename.to_str().context("Filename is invalid utf8")?;
                 Ok(filename.to_string())
             } else {
-                let url = source_url.url.inner();
+                let url: &url::Url = source_url.url.as_ref();
                 let filename = url
                     .path_segments()
                     .and_then(|mut segments| segments.next_back())

@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-alpm-srcinfo = { version = "0.6", default-features = false }
-alpm-types = "0.11"
+alpm-srcinfo = { version = "0.7", default-features = false }
+alpm-types = "0.13"
 anyhow = "1.0.100"
 astral-tokio-tar = "0.7"
 async-compression = { version = "0.4.32", features = ["bzip2", "gzip", "tokio", "xz"] }
@@ -30,4 +30,5 @@ thiserror = "2.0.17"
 tokio = { version = "1.48.0", features = ["rt-multi-thread", "macros", "fs", "io-std"] }
 tokio-stream = "0.1.17"
 tokio-util = "0.7.16"
+url = "2.5.8"
 warp = { version = "0.4.2", features = ["server"] }
